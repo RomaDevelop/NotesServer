@@ -6,6 +6,7 @@
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QDateTime>
+#include <QLineEdit>
 
 #include "NetConstants.h"
 #include "NetClient.h"
@@ -33,6 +34,7 @@ private:
 
 private:
 	QTextEdit *textEdit;
+	QLineEdit *answDelay;
 
 	QDateTime lastUpdate;
 	

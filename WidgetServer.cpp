@@ -5,6 +5,7 @@
 #include <QMessageBox>
 #include <QSettings>
 #include <QDir>
+#include <QLabel>
 #include <QTimer>
 #include <QGridLayout>
 #include <QHBoxLayout>
@@ -15,6 +16,7 @@
 #include "MyQDifferent.h"
 #include "MyQFileDir.h"
 #include "MyQTextEdit.h"
+#include "MyCppDifferent.h"
 #include "CodeMarkers.h"
 
 #include "Note.h"
@@ -43,6 +45,10 @@ WidgetServer::WidgetServer(QWidget *parent)
 		table = DataBase::DoSqlQueryGetTable("select * from " + Fields::Groups());
 		for(auto &row:table) textEdit->append(row.join(' '));
 	});
+
+	hlo1->addWidget(new QLabel("answ delay:"));
+	answDelay = new QLineEdit;
+	hlo1->addWidget(answDelay);
 
 	hlo1->addStretch();
 
@@ -173,6 +179,7 @@ void WidgetServer::RequestsWorker(QTcpSocket *sock, QString text)
 	Log("get reuqest "+requestData.type+" "+requestData.id+", start work");
 	if(requestData.type == NetConstants::request_group_names())
 	{
+		MyCppDifferent::sleep_ms(answDelay->text().toUInt());
 		AnswerForRequest(sock, requestData, "sdfgsdfsdf");
 		Log("request "+requestData.type+" "+requestData.id+" answered");
 	}
