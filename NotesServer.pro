@@ -1,4 +1,4 @@
-QT       += core gui widgets network
+QT       += core gui sql widgets network
 
 CONFIG += c++17
 
@@ -7,18 +7,29 @@ CONFIG += c++17
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 SOURCES += \
+    ../Notes/FastActions.cpp \
+    ../Notes/NetClient.cpp \
+    ../Notes/Note.cpp \
+    DataBase.cpp \
     WidgetServer.cpp \
     main.cpp
 
 HEADERS += \
-    Constants.h \
+    ../Notes/FastActions.h \
+    ../Notes/NetClient.h \
+    ../Notes/Note.h \
+    DataBase.h \
+    Fields.h \
+    NetConstants.h \
     WidgetServer.h
 
 INCLUDEPATH += \
-    ../include
+    ../include \
+	../Notes
 
 DEPENDPATH += \
-    ../include
+    ../include \
+	../Notes
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin

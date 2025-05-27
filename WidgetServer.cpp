@@ -14,19 +14,35 @@
 
 #include "MyQDifferent.h"
 #include "MyQFileDir.h"
+#include "MyQTextEdit.h"
+#include "CodeMarkers.h"
+
+#include "Note.h"
+#include "DataBase.h"
 
 WidgetServer::WidgetServer(QWidget *parent)
 	: QWidget(parent)
 {
+	DataBase::Init(serverBase, {});
+
 	QVBoxLayout *vlo_main = new QVBoxLayout(this);
 	QHBoxLayout *hlo1 = new QHBoxLayout;
 	QHBoxLayout *hlo2 = new QHBoxLayout;
 	vlo_main->addLayout(hlo1);
 	vlo_main->addLayout(hlo2);
 
-	QPushButton *btn1 = new QPushButton("button1");
+	QPushButton *btn1 = new QPushButton("clear");
 	hlo1->addWidget(btn1);
-	connect(btn1,&QPushButton::clicked,[](){ qDebug() << "btn1"; });
+	connect(btn1,&QPushButton::clicked,[this](){ textEdit->clear(); });
+
+	QPushButton *btnSqlTest = new QPushButton("sql test");
+	hlo1->addWidget(btnSqlTest);
+	connect(btnSqlTest,&QPushButton::clicked,[this](){
+		auto table = DataBase::DoSqlQueryGetTable("select * from " + Fields::Notes());
+		for(auto &row:table) textEdit->append(row.join(' '));
+		table = DataBase::DoSqlQueryGetTable("select * from " + Fields::Groups());
+		for(auto &row:table) textEdit->append(row.join(' '));
+	});
 
 	hlo1->addStretch();
 
@@ -52,6 +68,23 @@ void WidgetServer::CreateServer()
 	}
 }
 
+void WidgetServer::Log(const QString &str)
+{
+	textEdit->append(str);
+}
+
+void WidgetServer::Error(const QString &str)
+{
+	textEdit->append(str);
+	MyQTextEdit::ColorizeLastCount(textEdit, Qt::red, str.size());
+}
+
+void WidgetServer::Warning(const QString &str)
+{
+	textEdit->append(str);
+	MyQTextEdit::ColorizeLastCount(textEdit, Qt::blue, str.size());
+}
+
 void WidgetServer::SlotNewConnection()
 {
 	QTcpSocket *sock = server->nextPendingConnection();
@@ -67,48 +100,97 @@ void WidgetServer::SlotReadClient()
 	if(readed.endsWith(';')) readed.chop(1);
 	else
 	{
-		Log("get unfinished data ["+readed+"]");
+		Error("get unfinished data ["+readed+"]");
 		return;
 	}
 	auto commands = readed.split(';');
 
 	for(auto &command:commands)
 	{
-		if(command.startsWith(Constants::auth()))
+		command.replace(NetConstants::end_marker_replace(), NetConstants::end_marker());
+
+		if(command.startsWith(NetConstants::auth()))
 		{
 			Log("auth data get, cheking passwd");
 
-			QStringRef hashedPasswdFromClient(&command, Constants::auth().size(), command.size() - Constants::auth().size());
+			QStringRef hashedPasswdFromClient(&command, NetConstants::auth().size(), command.size() - NetConstants::auth().size());
 
 			QCryptographicHash hashCorretPasswd(QCryptographicHash::Md5);
-			hashCorretPasswd.addData(Constants::test_passwd().toUtf8());
+			hashCorretPasswd.addData(NetConstants::test_passwd().toUtf8());
 
 			if(hashCorretPasswd.result().toHex() == hashedPasswdFromClient)
 			{
-				Log(Constants::auth_success());
-				SendToClient(sock, Constants::auth_success());
+				Log(NetConstants::auth_success());
+				SendToClient(sock, NetConstants::auth_success(), true);
 
 				if(lastUpdate.isValid())
-					SendToClient(sock, Constants::last_update() + lastUpdate.toString(DateTimeFormat_ms));
-				else SendToClient(sock, Constants::last_update() + Constants::invalid());
+					SendToClient(sock, NetConstants::last_update() + lastUpdate.toString(DateTimeFormat_ms), true);
+				else SendToClient(sock, NetConstants::last_update() + NetConstants::invalid(), true);
 			}
 			else
 			{
-				Log(Constants::auth_failed());
-				SendToClient(sock, Constants::auth_failed());
+				Warning(NetConstants::auth_failed());
+				SendToClient(sock, NetConstants::auth_failed(), true);
 			}
+		}
+		else if(command.startsWith(NetConstants::note_saved()))
+		{
+			NoteSavedWork(std::move(command));
+		}
+		else if(command.startsWith(NetConstants::request()))
+		{
+			RequestsWorker(sock, std::move(command));
 		}
 		else
 		{
-			Log("received unexpacted data from client {" + command + "}");
-			SendToClient(sock, Constants::unexpacted());
+			Warning("received unexpacted data from client {" + command + "}");
+			SendToClient(sock, NetConstants::unexpacted(), true);
 		}
 	}
 }
 
-void WidgetServer::SendToClient(QTcpSocket *sock, const QString &str)
+void WidgetServer::SendToClient(QTcpSocket *sock, QString str, bool sendEndMarker)
 {
+	CodeMarkers::can_be_optimized("takes copy, than make other copy");
+
+	str.replace(NetConstants::end_marker(), NetConstants::end_marker_replace());
+
 	sock->write(str.toUtf8());
-	sock->write(";");
+	if(sendEndMarker) sock->write(";");
+}
+
+void WidgetServer::RequestsWorker(QTcpSocket *sock, QString text)
+{
+	CodeMarkers::can_be_optimized("give copy text to DecodeRequestCommand, but can move, but it used in error");
+	auto requestData = NetClient::DecodeRequestCommand(text);
+	if(!requestData.errors.isEmpty())
+	{
+		Error("error decoding request: "+requestData.errors + "; full text:\n"+text);
+		SendToClient(sock, "error decoding request: "+requestData.errors, true);
+		return;
+	}
+
+	Log("get reuqest "+requestData.type+" "+requestData.id+", start work");
+	if(requestData.type == NetConstants::request_group_names())
+	{
+		AnswerForRequest(sock, requestData, "sdfgsdfsdf");
+		Log("request "+requestData.type+" "+requestData.id+" answered");
+	}
+	else Error("Unrealesed requestData.type " + requestData.type);
+}
+
+void WidgetServer::AnswerForRequest(QTcpSocket *sock, NetClient::RequestData &requestData, QString str)
+{
+	SendToClient(sock, NetConstants::request_answ(), false);
+	SendToClient(sock, std::move(requestData.id.append(" ")), false);
+	SendToClient(sock, std::move(str), true);
+}
+
+void WidgetServer::NoteSavedWork(QString text)
+{
+	QStringRef noteText(&text, NetConstants::note_saved().size(), text.size()-NetConstants::note_saved().size());
+	auto note_uptr = Note::LoadNote(noteText.toString(), "");
+	if(!note_uptr) Log("cant load note from data:\n" + noteText.toString());
+	else Log("Note loaded from data:\n" + note_uptr->ToStrForLog());
 }
 

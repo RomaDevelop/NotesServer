@@ -7,7 +7,8 @@
 #include <QTcpSocket>
 #include <QDateTime>
 
-#include "Constants.h"
+#include "NetConstants.h"
+#include "NetClient.h"
 
 class WidgetServer : public QWidget
 {
@@ -18,7 +19,9 @@ public:
 	void CreateServer();
 	~WidgetServer() = default;
 
-	void Log(const QString &str) { textEdit->append(str); }
+	void Log(const QString &str);
+	void Error(const QString &str);
+	void Warning(const QString &str);
 
 private:
 	QTcpServer *server;
@@ -26,12 +29,16 @@ private slots:
 	void SlotNewConnection();
 	void SlotReadClient();
 private:
-	void SendToClient(QTcpSocket *sock, const QString &str);
+	void SendToClient(QTcpSocket *sock, QString str, bool sendEndMarker);
 
 private:
 	QTextEdit *textEdit;
 
 	QDateTime lastUpdate;
+	
+	void RequestsWorker(QTcpSocket *sock, QString text);
+	void AnswerForRequest(QTcpSocket *sock, NetClient::RequestData &requestData, QString str);
 
+	void NoteSavedWork(QString text);
 };
 #endif // WIDGET_H
