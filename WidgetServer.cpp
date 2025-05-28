@@ -25,7 +25,8 @@
 WidgetServer::WidgetServer(QWidget *parent)
 	: QWidget(parent)
 {
-	DataBase::Init(serverBase, {});
+	DataBase::Init(serverBase, {}, [this](const QString &str){ Error(str); }, [this](const QString &str){ Log(str); } );
+	DataBase::InitChildDataBase(DataBase::server);
 
 	QVBoxLayout *vlo_main = new QVBoxLayout(this);
 	QHBoxLayout *hlo1 = new QHBoxLayout;
@@ -179,15 +180,30 @@ void WidgetServer::RequestsWorker(QTcpSocket *sock, QString text)
 	Log("get reuqest "+requestData.type+" "+requestData.id+", start work");
 	if(requestData.type == NetConstants::request_group_names())
 	{
-		MyCppDifferent::sleep_ms(answDelay->text().toUInt());
-		AnswerForRequest(sock, requestData, "sdfgsdfsdf");
-		Log("request "+requestData.type+" "+requestData.id+" answered");
+		AnswerForRequest(sock, requestData, "unrealesed");
+		Error("request "+requestData.type+" "+requestData.id+" unrealesed");
+	}
+	else if(requestData.type == NetConstants::request_try_create_group())
+	{
+		QString newGroupName = requestData.content;
+		int id = DataBase::TryCreateNewGroup(newGroupName, {});
+		if(id < 0)
+		{
+			Log("Group "+newGroupName+" not created");
+			AnswerForRequest(sock, requestData, NetConstants::not_did());
+		}
+		else
+		{
+			Log("Group "+newGroupName+" created");
+			AnswerForRequest(sock, requestData, NetConstants::Answ_try_create_group(QSn(id)));
+		}
 	}
 	else Error("Unrealesed requestData.type " + requestData.type);
 }
 
 void WidgetServer::AnswerForRequest(QTcpSocket *sock, NetClient::RequestData &requestData, QString str)
 {
+	MyCppDifferent::sleep_ms(answDelay->text().toUInt());
 	SendToClient(sock, NetConstants::request_answ(), false);
 	SendToClient(sock, std::move(requestData.id.append(" ")), false);
 	SendToClient(sock, std::move(str), true);

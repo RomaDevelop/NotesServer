@@ -41,6 +41,8 @@ namespace Fields {
 	const int dtPostponeInd		= dtNotifyInd+1;
 	const int contentInd		= dtPostponeInd+1;
 
+	const int maxStringFieldLenth = 255;
+
 	inline const QString& dtFormat() { static QString str = SaveKeyWods::dtFormat(); return str; }
 }
 
