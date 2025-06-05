@@ -8,18 +8,18 @@
 #include "Note.h"
 
 const BaseData clientBaseRegular {"Client base",
-									"D:\\Documents\\C++ QT\\Notes\\Client base.mdb",
-									"D:\\Documents\\C++ QT\\Notes\\storage"};
+									"D:\\Work\\Notes\\Client base.mdb",
+									"D:\\Work\\Notes\\storage"};
 const BaseData clientBaseDebug {"Client base debug",
-									"D:\\Documents\\C++ QT\\Notes\\Client base debug.mdb",
-									"D:\\Documents\\C++ QT\\Notes\\storage_debug"};
+									"D:\\Work\\Notes\\Client base debug.mdb",
+									"D:\\Work\\Notes\\storage_debug"};
 
-const BaseData serverBaseRegular {"Client base",
-									"D:\\Documents\\C++ QT\\NotesServer\\Server base.mdb",
-									"D:\\Documents\\C++ QT\\NotesServer\\storage"};
-const BaseData serverBaseDebug {"Client base debug",
-									"D:\\Documents\\C++ QT\\NotesServer\\Server base debug.mdb",
-									"D:\\Documents\\C++ QT\\NotesServer\\storage_debug"};
+const BaseData serverBaseRegular {"Server base",
+									"D:\\Work\\NotesServer\\Server base.mdb",
+									"D:\\Work\\NotesServer\\storage"};
+const BaseData serverBaseDebug {"Server base debug",
+									"D:\\Work\\NotesServer\\Server base debug.mdb",
+									"D:\\Work\\NotesServer\\storage_debug"};
 
 #ifdef QT_DEBUG
 const BaseData clientBase {clientBaseDebug};
@@ -46,19 +46,28 @@ public:
 	static const QString& DefaultGroupId();
 	static QStringList GroupsNames();
 	static QStringPairVector GroupsData() { return {}; }
-	static int TryCreateNewGroup(QString name, QString idGroup);
-	static bool MoveNoteToGroup(QString noteId, QString newGroupId);
+	static qint64 TryCreateNewGroup(QString name, QString idGroup);
+	static bool MoveNoteToGroupOnClient(QString noteId, QString newGroupId, QString dtUpdated);
+	static bool MoveNoteToGroupOnServer(QString noteIdOnServer, QString newGroupId, QString dtUpdated);
 
-	static int InsertNoteInDefaultGroup(Note *note);
+	static qint64 InsertNoteInClientDB(Note *note);
+	static qint64 InsertNoteInServerDB(Note *note);
 
-	static QStringList NoteById(const QString &id);
-	static bool CheckNoteId(const QString &id);
+	static QStringList NoteByIdOnClient(const QString &id);
+	static QStringList NoteByIdOnServer(const QString &idOnServer);
+	static bool CheckNoteIdOnClient(const QString &id);
+	static bool CheckNoteIdOnServer(const QString &idOnServer);
 	static std::vector<Note> NotesFromBD();
 
-	static void SaveNote(Note *note);
-	static bool RemoveNote(Note *note);
+	static bool SetNoteFieldIdOnServer_OnClient(const QString &idNote, const QString &idOnServer);
 
+	static QString SaveNoteOnClient(Note *note);
+	static bool SaveNoteOnServer(Note *note);
+	static bool RemoveNoteOnClient(const QString &id, bool chekId);
+	static bool RemoveNoteOnServer(const QString &idOnServer, bool chekId);
 
+	static QString HighestIdOnServer();
+	static std::vector<QStringList> NotesWithHigherIdOnServer(QString idOnServer);
 };
 
 

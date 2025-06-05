@@ -11,6 +11,7 @@ SOURCES += \
     ../Notes/NetClient.cpp \
     ../Notes/Note.cpp \
     DataBase.cpp \
+    NetConstants.cpp \
     WidgetServer.cpp \
     main.cpp
 
