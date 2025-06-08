@@ -35,6 +35,7 @@ QString NetConstants::MakeRequest_synch_note(std::vector<SynchData> datas)
 
 std::vector<NetConstants::SynchData> NetConstants::GetDataFromRequest_synch_note(const QString & text)
 {
+	if(text.isEmpty()) return {};
 	std::vector<SynchData> datas;
 	auto parts = text.split(',');
 	for(int i=0; i<parts.size(); i+=2)

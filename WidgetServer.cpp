@@ -138,7 +138,7 @@ void WidgetServer::SlotNewConnection()
 	connect(sock, &QTcpSocket::readyRead, this, &WidgetServer::SlotReadClient);
 	clientsDatas[sock] = {};
 
-	textEdit->append("new connection processed");
+	Log("new connection processed");
 }
 
 void WidgetServer::SlotReadClient()
@@ -401,7 +401,7 @@ void WidgetServer::request_synch_note_worker(QTcpSocket * sock, NetClient::Reque
 
 	auto datas = NetConstants::GetDataFromRequest_synch_note(requestData.content);
 	if(datas.empty()) {
-		Error("request_synch_note_worker get empty datas from " + requestData.content);
+		Error("request_synch_note_worker get empty datas from content: " + requestData.content);
 		AnswerForRequestSending(sock, requestData, NetConstants::not_did());
 		return;
 	}
