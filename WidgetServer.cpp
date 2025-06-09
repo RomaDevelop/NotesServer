@@ -74,7 +74,7 @@ WidgetServer::WidgetServer(QWidget *parent)
 	CreateServer();
 
 	resize(650,600);
-	QTimer::singleShot(0,[this](){ move(10, 10); });
+	QTimer::singleShot(0,[this](){ move(-700, 10); });
 }
 
 void WidgetServer::ConnectDB()
@@ -134,17 +134,38 @@ void WidgetServer::Warning(const QString &str)
 void WidgetServer::SlotNewConnection()
 {
 	QTcpSocket *sock = server->nextPendingConnection();
-	connect(sock, &QTcpSocket::disconnected, [this, sock](){ sock->deleteLater(); clientsDatas.erase(sock); });
+	connect(sock, &QTcpSocket::disconnected, [this, sock]()
+	{
+		Log("disconnected: " + MyQString::AsDebug(sock));
+		sock->deleteLater();
+		clientsDatas.erase(sock);
+	});
 	connect(sock, &QTcpSocket::readyRead, this, &WidgetServer::SlotReadClient);
 	clientsDatas[sock] = {};
 
-	Log("new connection processed");
+	Log("new connection processed: " + MyQString::AsDebug(sock));
 }
 
 void WidgetServer::SlotReadClient()
 {
 	QTcpSocket *sock = (QTcpSocket*)sender();
 	QString readed = sock->readAll();
+
+	QByteArray requestData = readed.toUtf8();
+	Log("received: " + requestData);
+
+	clientsDatas[sock].msg += requestData;
+
+	if(clientsDatas[sock].msg.contains("END"))
+	{
+		qDebug() << "Received data:" << clientsDatas[sock].msg;
+		clientsDatas[sock].msg.clear();
+		sock->write("sdfgdsfg");
+		sock->disconnectFromHost();
+	}
+
+	return;
+
 	if(readed.endsWith(';')) readed.chop(1);
 	else
 	{

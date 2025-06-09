@@ -14,6 +14,7 @@
 struct ClientData
 {
 	std::vector<int> lastSynchedNotesIdsOnServer;
+	QString msg;
 };
 
 class WidgetServer : public QWidget, public Requester
