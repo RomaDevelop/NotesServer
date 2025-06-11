@@ -1,5 +1,7 @@
 #include "NetConstants.h"
 
+#include "CodeMarkers.h"
+
 QString NetConstants::MakeRequest_move_note_to_group(const QString & idNoteOnServer, const QString & idNewGroup, const QDateTime & dtUpdated)
 {
 	return QString(idNoteOnServer).append(" ").append(idNewGroup).append(" ")
@@ -38,6 +40,8 @@ std::vector<NetConstants::SynchData> NetConstants::GetDataFromRequest_synch_note
 	if(text.isEmpty()) return {};
 	std::vector<SynchData> datas;
 	auto parts = text.split(',');
+	if(parts.size()%2 != 0) { qdbg << "ERROR!!! bad Request_synch_note content: " + text; return {}; }
+	if(0) CodeMarkers::to_do("здесь нужно убрать qdbg и делать какой-то полноценный вывод ошибок кудато");
 	for(int i=0; i<parts.size(); i+=2)
 	{
 		auto &data = datas.emplace_back();
