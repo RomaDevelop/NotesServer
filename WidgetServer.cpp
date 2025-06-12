@@ -11,6 +11,7 @@
 #include <QVBoxLayout>
 #include <QPushButton>
 #include <QCryptographicHash>
+#include <QGuiApplication>
 
 #include "MyQDifferent.h"
 #include "MyQFileDir.h"
@@ -71,10 +72,13 @@ WidgetServer::WidgetServer(QWidget *parent)
 	hlo2->addWidget(textEdit);
 
 	ConnectDB();
-	CreateServer();
+	StartServer();
 
 	resize(650,600);
-	QTimer::singleShot(0,[this](){ move(-700, 10); });
+	QTimer::singleShot(0,[this](){
+		move(-1850, 10);
+		if(qApp->screens().size() == 1) move(10, 10);
+	});
 }
 
 void WidgetServer::ConnectDB()
@@ -99,17 +103,18 @@ void WidgetServer::ConnectDB()
 	DataBase::BackupBase();
 }
 
-void WidgetServer::CreateServer()
+void WidgetServer::StartServer()
 {
-	int port = 25001;
-	server = new QTcpServer(this);
-	connect(server, &QTcpServer::newConnection, this, &WidgetServer::SlotNewConnection);
+	connect(&server, &HttpServer::SignalNewConnection, this, &WidgetServer::SlotNewConnection);
 
-	if(!server->listen(QHostAddress::Any,port))
-	{
-		Error("error listen " + server->errorString());
-		server->close();
-	}
+	server.logFoo = [this](const QString &str){
+		QMetaObject::invokeMethod(textEdit, [this, str]() {
+			textEdit->append(str);
+		});
+	};
+
+	int port = 25002;
+	server.start(port);
 }
 
 void WidgetServer::Log(const QString &str, bool appendInLastRow)
@@ -131,16 +136,14 @@ void WidgetServer::Warning(const QString &str)
 	MyQTextEdit::ColorizeLastCount(textEdit, Qt::blue, str.size());
 }
 
-void WidgetServer::SlotNewConnection()
+void WidgetServer::SlotNewConnection(HttpClient *sock)
 {
-	QTcpSocket *sock = server->nextPendingConnection();
-	connect(sock, &QTcpSocket::disconnected, [this, sock]()
+	connect(sock, &HttpClient::SignalDisconnected, [this, sock]()
 	{
-		Log("disconnected: " + MyQString::AsDebug(sock));
-		sock->deleteLater();
+		Log("disconnected: "/* + MyQString::AsDebug(sock)*/);
 		clientsDatas.erase(sock);
 	});
-	connect(sock, &QTcpSocket::readyRead, this, &WidgetServer::SlotReadClient);
+	connect(sock, &HttpClient::SignalReadyRead, this, &WidgetServer::SlotReadClient);
 	clientsDatas[sock] = {};
 
 	Log("new connection processed: " + MyQString::AsDebug(sock));
@@ -148,24 +151,19 @@ void WidgetServer::SlotNewConnection()
 
 void WidgetServer::SlotReadClient()
 {
-	QTcpSocket *sock = (QTcpSocket*)sender();
-	QString readed = sock->readAll();
+	HttpClient *sock = (HttpClient*)sender();
+	//Log("received:\n" + HttpCommon::GetFullText(sock->request));
+	Log("received target: " + sock->ReadTarget());
+	Log("received body: " + sock->ReadBody());
 
-	QByteArray requestData = readed.toUtf8();
-	Log("received: " + requestData);
-
-	clientsDatas[sock].msg += requestData;
-
-	if(clientsDatas[sock].msg.contains("END"))
-	{
-		qDebug() << "Received data:" << clientsDatas[sock].msg;
-		clientsDatas[sock].msg.clear();
-		sock->write("sdfgdsfg");
-		sock->disconnectFromHost();
-	}
+	static int i=0;
+	sock->bodyToWrite = "hallo from SlotReadClient " + QSn(i++);
+	Log(sock->bodyToWrite);
+	sock->readyWrite = true;
 
 	return;
 
+	QString readed;
 	if(readed.endsWith(';')) readed.chop(1);
 	else
 	{
@@ -188,37 +186,37 @@ void WidgetServer::SlotReadClient()
 			QCryptographicHash hashCorretPasswd(QCryptographicHash::Md5);
 			hashCorretPasswd.addData(NetConstants::test_passwd().toUtf8());
 
-			if(hashCorretPasswd.result().toHex() == hashedPasswdFromClient)
-			{
-				Log(NetConstants::auth_success());
-				SendInSock(sock, NetConstants::auth_success(), true);
+//			if(hashCorretPasswd.result().toHex() == hashedPasswdFromClient)
+//			{
+//				Log(NetConstants::auth_success());
+//				SendInSock(sock, NetConstants::auth_success(), true);
 
-				if(lastUpdate.isValid())
-					SendInSock(sock, NetConstants::last_update() + lastUpdate.toString(DateTimeFormat_ms), true);
-				else SendInSock(sock, NetConstants::last_update() + NetConstants::invalid(), true);
-			}
-			else
-			{
-				Warning(NetConstants::auth_failed());
-				SendInSock(sock, NetConstants::auth_failed(), true);
-			}
+//				if(lastUpdate.isValid())
+//					SendInSock(sock, NetConstants::last_update() + lastUpdate.toString(DateTimeFormat_ms), true);
+//				else SendInSock(sock, NetConstants::last_update() + NetConstants::invalid(), true);
+//			}
+//			else
+//			{
+//				Warning(NetConstants::auth_failed());
+//				SendInSock(sock, NetConstants::auth_failed(), true);
+//			}
 		}
 		else if(command.startsWith(NetConstants::msg()))
 		{
-			MsgsWorker(sock, std::move(command));
+			//MsgsWorker(sock, std::move(command));
 		}
 		else if(command.startsWith(NetConstants::request()))
 		{
-			RequestsWorker(sock, std::move(command));
+			//RequestsWorker(sock, std::move(command));
 		}
 		else if(command.startsWith(NetConstants::request_answ()))
 		{
-			RequestsAnswersWorker(std::move(command));
+			//RequestsAnswersWorker(std::move(command));
 		}
 		else
 		{
 			Warning("received unexpacted data from client {" + command + "}");
-			SendInSock(sock, NetConstants::unexpacted(), true);
+			//SendInSock(sock, NetConstants::unexpacted(), true);
 		}
 	}
 }
@@ -250,8 +248,9 @@ void WidgetServer::msg_error_worker(QTcpSocket * /*sock*/, QString && msgContent
 
 void WidgetServer::msg_all_client_notes_synch_sended_worker(QTcpSocket * sock, QString && /*msgContent*/)
 {
-	auto &clientData = clientsDatas[sock];
-	clientData.lastSynchedNotesIdsOnServer.clear();
+	Error("//auto &clientData = clientsDatas[sock];");
+	//auto &clientData = clientsDatas[sock];
+	//clientData.lastSynchedNotesIdsOnServer.clear();
 	Log("msg_all_client_notes_synch_sended get, lastSynchedNotesIdsOnServer cleared");
 }
 
@@ -447,8 +446,9 @@ void WidgetServer::request_synch_note_worker(QTcpSocket * sock, NetClient::Reque
 			Note note;
 			note.InitFromRecord(noteRec);
 
-			auto &clientData = clientsDatas[sock];
-			clientData.lastSynchedNotesIdsOnServer.emplace_back(note.idOnServer);
+			Error("//auto &clientData = clientsDatas[sock];");
+			//auto &clientData = clientsDatas[sock];
+			//clientData.lastSynchedNotesIdsOnServer.emplace_back(note.idOnServer);
 
 			if(0) CodeMarkers::to_do_with_cpp20("replace two compare < > to one <=>");
 			else if(note.DtLastUpdatedStr() < data.dtUpdatedStr)

@@ -48,9 +48,9 @@ QString DataBase::CountGroupsWithName(QString nameGroup)
 						   {{":name", std::move(nameGroup)}});
 }
 
-const QString &DataBase::DefaultGroupId()
+const QString &DataBase::DefaultGroupId2()
 {
-	static QString str = GroupId(Note::defaultGroupName());
+	static QString str = GroupId(Note::defaultGroupName2());
 	return str;
 }
 
@@ -59,21 +59,46 @@ QStringList DataBase::GroupsNames()
 	return DoSqlQueryGetFirstField("select "+Fields::nameGroup()+" from "+Fields::Groups());
 }
 
-qint64 DataBase::TryCreateNewGroup(QString name, QString idGroup)
+QStringPairVector DataBase::GroupsIdsAndNames()
+{
+	auto table = DoSqlQueryGetTable("select "+Fields::idGroup()+", "+Fields::nameGroup()+" from "+Fields::Groups());
+	QStringPairVector v;
+	for(auto &row:table) v.emplace_back(std::move(row[0]), std::move(row[1]));
+	return v;
+}
+
+QStringListVector DataBase::GroupsAllFields()
+{
+	return DoSqlQueryGetTable("select * from "+Fields::Groups());
+}
+
+bool DataBase::IsGroupLocalById(const QString &id)
+{
+	if(id.toLongLong() > 0) return false;
+	else return true;
+}
+
+bool DataBase::IsGroupLocalByName(const QString &name)
+{
+	QString id = GroupId(name);
+	return IsGroupLocalById(id);
+}
+
+qint64 DataBase::TryCreateNewGlobalGroup(QString name, QString idGroup)
 {
 	if(name.isEmpty() || name.size() > Fields::maxStringFieldLenth) return -1;
 
 	auto count = CountGroupsWithName(name);
 	if(count != '0')
 	{
-		if(workMode == server) Log("TryCreateNewGroup: group with name " + name + " exists");
-		if(workMode == client) Error("TryCreateNewGroup: group with name " + name + " exists");
+		if(workMode == server) Log("TryCreateNewGlobalGroup: group with name " + name + " exists");
+		if(workMode == client) Error("TryCreateNewGlobalGroup: group with name " + name + " exists");
 		return -1;
 	}
 
 	if(workMode == server)
 	{
-		if(!idGroup.isEmpty()) { Error("idGroup not empty in server mode"); return -1; }
+		if(!idGroup.isEmpty()) { Error("TryCreateNewGlobalGroupidGroup: idGroup not empty in server mode"); return -1; }
 		uint64_t maxId = DoSqlQueryGetFirstCell("select max("+Fields::idGroup()+") from "+Fields::Groups()).toULongLong();
 		maxId++;
 
@@ -85,19 +110,59 @@ qint64 DataBase::TryCreateNewGroup(QString name, QString idGroup)
 	}
 	else if(workMode == client)
 	{
-		if(idGroup.isEmpty()) { Error("idGroup is empty in client mode"); return -1; }
+		if(idGroup.isEmpty()) { Error("TryCreateNewGlobalGroupidGroup is empty in client mode"); return -1; }
 		auto count = CountGroupsWithId(idGroup);
-		if(count != '0') { Error("TryCreateNewGroup: group with id " + idGroup + " exists"); return -1; }
+		if(count != '0') { Error("TryCreateNewGlobalGroup: group with id " + idGroup + " exists"); return -1; }
 
-		auto request = MakeInsertRequest(Fields::Groups(), {Fields::idGroup(), Fields::nameGroup()}, {idGroup, std::move(name)});
+		auto request = MakeInsertRequest(Fields::Groups(),
+										 {Fields::idGroup(), Fields::nameGroup(), Fields::subscribed()},
+										 {idGroup, std::move(name), Fields::True()});
 		DoSqlQuery(request.first, request.second);
 		count = CountGroupsWithId(idGroup);
 		if(count == "1") return idGroup.toLongLong();
 		return count.toInt() * -1;
 	}
 
-	Error("TryCreateNewGroup with wrong workMode: " + MyQString::AsDebug(workMode));
+	Error("TryCreateNewGlobalGroup with wrong workMode: " + MyQString::AsDebug(workMode));
 	return -1;
+}
+
+qint64 DataBase::TryCreateNewLocalGroup(QString name)
+{
+	if(workMode == server){ Error("TryCreateNewLocalGroup executed in server mode"); return 1; }
+
+
+	if(name.isEmpty() || name.size() > Fields::maxStringFieldLenth) return 1;
+
+	auto count = CountGroupsWithName(name);
+	if(count != '0')
+	{
+		Error("TryCreateNewLocalGroup: group with name " + name + " exists");
+		return 1;
+	}
+
+	auto minId = DoSqlQueryGetFirstCell("select min("+Fields::idGroup()+") from "+Fields::Groups());
+	QString idGroup = QSn(minId.toLongLong()-1);
+
+	if(idGroup.isEmpty()) { Error("TryCreateNewLocalGroup: is empty in client mode"); return 1; }
+	count = CountGroupsWithId(idGroup);
+	if(count != '0') { Error("TryCreateNewLocalGroup: group with id " + idGroup + " exists"); return 1; }
+
+	auto request = MakeInsertRequest(Fields::Groups(),
+									 {Fields::idGroup(), Fields::nameGroup(), Fields::subscribed()},
+									 {idGroup, std::move(name), Fields::True()});
+	DoSqlQuery(request.first, request.second);
+	count = CountGroupsWithId(idGroup);
+	if(count == "1") return idGroup.toLongLong();
+	return count.toInt() * -1;
+}
+
+void DataBase::SetGroupSubscribed(QString groupId, bool value)
+{
+	auto request = MakeUpdateRequestOneField(Fields::Groups(), Fields::subscribed(),
+											 value ? Fields::True() : Fields::False(),
+											 Fields::idGroup(), std::move(groupId));
+	DoSqlQuery(request.first, request.second);
 }
 
 bool DataBase::MoveNoteToGroupOnClient(QString noteId, QString newGroupId, QString dtUpdated)
@@ -157,7 +222,6 @@ qint64 DataBase::InsertNoteInClientDB(Note *note)
 
 qint64 DataBase::InsertNoteInServerDB(Note * note)
 {
-	if(note->group == note->defaultGroupName()) { Error("InsertNoteInServerDB in defaultGroupName"); return -1; }
 	QString idGroup = GroupId(note->group);
 	if(idGroup.isEmpty()) { Error("InsertNoteInServerDB in not existing group "+note->group); return -1; }
 
@@ -211,7 +275,10 @@ bool DataBase::CheckNoteIdOnServer(const QString & idOnServer)
 std::vector<Note> DataBase::NotesFromBD()
 {
 	std::vector<Note> notes;
-	auto table = DoSqlQueryGetTable("select * from "+Fields::Notes()+" order by "+Fields::idNote());
+	auto table = DoSqlQueryGetTable("select * from "+Fields::Notes()
+			+" inner join "+Fields::Groups()+" on "+Fields::Groups()+"."+Fields::idGroup()+" = "+Fields::Notes()+"."+Fields::idGroup()
+			+" where "+Fields::subscribed()+" = "+Fields::True()
+			+" order by "+Fields::idNote());
 	for(auto &row:table)
 	{
 		notes.emplace_back();

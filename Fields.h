@@ -24,6 +24,7 @@ namespace Fields {
 	inline const QString& Groups() { static QString str = "Groups"; return str; }
 
 	inline const QString& nameGroup() { static QString str = "nameGroup"; return str; }
+	inline const QString& subscribed() { static QString str = "subscribed"; return str; }
 
 	inline const QString& idNote			() { static QString str = "idNote"; return str; }
 	inline const QString& idNoteOnServer	() { static QString str = "idNoteOnServer"; return str; }
@@ -35,10 +36,14 @@ namespace Fields {
 	inline const QString& content			() { static QString str = "content"; return str; }
 	inline const QString& dtLastUpdated		() { static QString str = "lastUpdated"; return str; }
 
+	const int idGroupIndexInGroups	= 0;
+	const int nameGroupIndex		= idGroupIndexInGroups+1;
+	const int subscribedIndex		= nameGroupIndex+1;
+
 	const int idNoteInd			= 0;
 	const int idNoteOnServerInd	= idNoteInd+1;
-	const int idGroupInd		= idNoteOnServerInd+1;
-	const int nameNoteInd		= idGroupInd+1;
+	const int idGroupIndInNotes	= idNoteOnServerInd+1;
+	const int nameNoteInd		= idGroupIndInNotes+1;
 	const int activeNotifyInd	= nameNoteInd+1;
 	const int dtNotifyInd		= activeNotifyInd+1;
 	const int dtPostponeInd		= dtNotifyInd+1;
@@ -49,6 +54,10 @@ namespace Fields {
 
 	inline const QString& dtFormat() { static QString str = SaveKeyWods::dtFormat(); return str; }
 	inline const QString& dtFormatLastUpated() { static QString str = DateTimeFormat_ms; return str; }
+
+	inline const QString& True() { static QString str = "1"; return str; }
+	inline const QString& False() { static QString str = "0"; return str; }
+	inline bool CheckLogicField(const QString &value) { return (value == "1" || value == True()); }
 }
 
 #endif // FIELDS_H

@@ -3,13 +3,13 @@
 
 #include <QWidget>
 #include <QTextEdit>
-#include <QTcpServer>
-#include <QTcpSocket>
 #include <QDateTime>
 #include <QLineEdit>
 
 #include "NetConstants.h"
 #include "NetClient.h"
+
+#include "Server.h"
 
 struct ClientData
 {
@@ -24,7 +24,7 @@ class WidgetServer : public QWidget, public Requester
 public:
 	WidgetServer(QWidget *parent = nullptr);
 	void ConnectDB();
-	void CreateServer();
+	void StartServer();
 	~WidgetServer() = default;
 
 	virtual void Log(const QString &str, bool appendInLastRow = false) override;
@@ -32,9 +32,9 @@ public:
 	virtual void Warning(const QString &str) override;
 
 private:
-	QTcpServer *server;
+	HttpServer server;
 private slots:
-	void SlotNewConnection();
+	void SlotNewConnection(HttpClient *sock);
 	void SlotReadClient();
 private:
 	void SendToClient(QTcpSocket *sock, QString str, bool sendEndMarker);
@@ -45,7 +45,7 @@ private:
 
 	QDateTime lastUpdate;
 
-	std::map<QTcpSocket*, ClientData> clientsDatas;
+	std::map<HttpClient*, ClientData> clientsDatas;
 
 	void MsgsWorker(QTcpSocket *sock, QString text);
 

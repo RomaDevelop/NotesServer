@@ -44,10 +44,15 @@ public:
 	static QString GroupName(const QString &groupId);
 	static QString CountGroupsWithId(QString idGroup);
 	static QString CountGroupsWithName(QString nameGroup);
-	static const QString& DefaultGroupId();
+	static const QString& DefaultGroupId2();
 	static QStringList GroupsNames();
-	static QStringPairVector GroupsData() { return {}; }
-	static qint64 TryCreateNewGroup(QString name, QString idGroup);
+	static QStringPairVector GroupsIdsAndNames();
+	static QStringListVector GroupsAllFields();
+	static bool IsGroupLocalById(const QString &id);
+	static bool IsGroupLocalByName(const QString &name);
+	static qint64 TryCreateNewGlobalGroup(QString name, QString idGroup); // ids: 1...n ; returns -1 if error
+	static qint64 TryCreateNewLocalGroup(QString name); // ids: 0...-n ; returns 1 if error
+	static void SetGroupSubscribed(QString groupId, bool value);
 	static bool MoveNoteToGroupOnClient(QString noteId, QString newGroupId, QString dtUpdated);
 	static bool MoveNoteToGroupOnServer(QString noteIdOnServer, QString newGroupId, QString dtUpdated);
 

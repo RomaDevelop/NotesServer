@@ -12,6 +12,7 @@ SOURCES += \
     ../Notes/Note.cpp \
     DataBase.cpp \
     NetConstants.cpp \
+    Server.cpp \
     WidgetServer.cpp \
     main.cpp
 
@@ -22,15 +23,20 @@ HEADERS += \
     DataBase.h \
     Fields.h \
     NetConstants.h \
+    Server.h \
     WidgetServer.h
 
 INCLUDEPATH += \
+    C:/Qt/boost_1_72_0 \
     ../include \
 	../Notes
 
 DEPENDPATH += \
+    C:/Qt/boost_1_72_0 \
     ../include \
 	../Notes
+
+LIBS += -lws2_32
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin
