@@ -2,6 +2,59 @@
 
 #include "CodeMarkers.h"
 
+#include "LaunchParams.h"
+#include "Resources.h"
+
+const BaseData clientBaseRegularHome {"Client base",
+									"D:\\Documents\\C++ QT\\Notes\\Client base.mdb",
+									"D:\\Documents\\C++ QT\\Notes\\storage"};
+const BaseData clientBaseDebugHome {"Client base debug",
+									"D:\\Documents\\C++ QT\\Notes\\Client base debug.mdb",
+									"D:\\Documents\\C++ QT\\Notes\\storage_debug"};
+
+const BaseData serverBaseRegularHome {"Server base",
+									"D:\\Documents\\C++ QT\\NotesServer\\Server base.mdb",
+									"D:\\Documents\\C++ QT\\NotesServer\\storage"};
+const BaseData serverBaseDebugHome {"Server base debug",
+									"D:\\Documents\\C++ QT\\NotesServer\\Server base debug.mdb",
+									"D:\\Documents\\C++ QT\\NotesServer\\storage_debug"};
+
+const BaseData clientBaseRegularWork {"Client base",
+									"C:\\Work\\C++\\Notes\\Client base.mdb",
+									"C:\\Work\\C++\\Notes\\storage"};
+const BaseData clientBaseDebugWork {"Client base debug",
+									"C:\\Work\\C++\\Notes\\Client base debug.mdb",
+									"C:\\Work\\C++\\Notes\\storage_debug"};
+
+const BaseData serverBaseRegularWork {"Server base",
+									  "C:\\Work\\C++\\NotesServer\\Server base.mdb",
+									  "C:\\Work\\C++\\NotesServer\\storage"};
+const BaseData serverBaseDebugWork {"Server base debug",
+									"C:\\Work\\C++\\NotesServer\\Server base debug.mdb",
+									"C:\\Work\\C++\\NotesServer\\storage_debug"};
+
+bool debug = false;
+#ifdef QT_DEBUG
+debug=true;
+#endif
+
+BaseData DataBase::defineBase(workModes mode)
+{
+	if(LaunchParams::CurrentDeveloper()->devName == DevNames::RomaHome())
+	{
+		if(mode == client) return debug ? clientBaseDebugHome : clientBaseRegularHome;
+		if(mode == server) return debug ? serverBaseDebugHome : serverBaseRegularHome;
+	}
+	else if(LaunchParams::CurrentDeveloper()->devName == DevNames::RomaWork())
+	{
+		if(mode == client) return debug ? clientBaseDebugWork : clientBaseRegularWork;
+		if(mode == server) return debug ? serverBaseDebugWork : serverBaseRegularWork;
+	}
+
+	QMbError("unexpacted dev name ("+LaunchParams::CurrentDeveloper()->devName+") or mode (" + MyQString::AsDebug(mode)+")");
+	return {};
+}
+
 void DataBase::BackupBase()
 {
 	if(0) CodeMarkers::to_do("remove this and use BackupBase from parent class; should do backup before init;"

@@ -7,34 +7,13 @@
 
 #include "Note.h"
 
-
-const BaseData clientBaseRegular {"Client base",
-									"D:\\Documents\\C++ QT\\Notes\\Client base.mdb",
-									"D:\\Documents\\C++ QT\\Notes\\storage"};
-const BaseData clientBaseDebug {"Client base debug",
-									"D:\\Documents\\C++ QT\\Notes\\Client base debug.mdb",
-									"D:\\Documents\\C++ QT\\Notes\\storage_debug"};
-
-const BaseData serverBaseRegular {"Server base",
-									"D:\\Documents\\C++ QT\\NotesServer\\Server base.mdb",
-									"D:\\Documents\\C++ QT\\NotesServer\\storage"};
-const BaseData serverBaseDebug {"Server base debug",
-									"D:\\Documents\\C++ QT\\NotesServer\\Server base debug.mdb",
-									"D:\\Documents\\C++ QT\\NotesServer\\storage_debug"};
-
-#ifdef QT_DEBUG
-const BaseData clientBase {clientBaseDebug};
-const BaseData serverBase {serverBaseDebug};
-#else
-const BaseData clientBase {clientBaseRegular};
-const BaseData serverBase {serverBaseRegular};
-#endif
-
 class DataBase: public MyQSqlDatabase
 {
 public:
 	enum workModes { undefined, server, client };
 	inline static workModes workMode = undefined;
+
+	static BaseData defineBase(workModes mode);
 
 	static void InitChildDataBase(workModes workMode_) { workMode = workMode_; }
 
