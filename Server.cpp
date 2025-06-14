@@ -61,8 +61,8 @@ void HttpServer::handle_session(tcp::socket socket) {
 
 	try {
 		HttpClientGuard clientGuard;
-		QMetaObject::invokeMethod(this, [this, &clientGuard](){
-			clientGuard.client = new HttpClient();
+		QMetaObject::invokeMethod(this, [this, &clientGuard, &socket](){
+			clientGuard.client = new HttpClient(&socket);
 			emit SignalNewConnection(clientGuard.client);
 		}, Qt::BlockingQueuedConnection);
 

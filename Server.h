@@ -15,6 +15,8 @@
 
 #include <QObject>
 
+#include "NetClient.h"
+
 using tcp = boost::asio::ip::tcp;
 namespace net = boost::asio;
 namespace beast = boost::beast;
@@ -31,17 +33,18 @@ struct HttpCommon
 	}
 };
 
-class HttpClient : public QObject
+class HttpClient : public QObject, public ISocket
 {
 	Q_OBJECT
 public:
-	explicit HttpClient(QObject *parent = nullptr) : QObject(parent) { }
+	explicit HttpClient(tcp::socket *socket, QObject *parent = nullptr) : QObject(parent), socket{socket} { }
 	~HttpClient() { }
 
 	std::function<void(const QString &str)> logFoo;
 	void Log(const QString &str) { if(logFoo) logFoo(str); else qdbg << str; }
 	void Error(const QString &str) { if(logFoo) logFoo(str); /*else*/ qdbg << str; }
 
+	tcp::socket *socket = nullptr;
 	http::request<http::string_body> request;
 	QString ReadTarget() { return QString::fromStdString(request.target().to_string()); }
 	QString ReadBody() { return QString::fromStdString(request.body()); }

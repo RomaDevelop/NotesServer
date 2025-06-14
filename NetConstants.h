@@ -31,6 +31,8 @@ struct NetConstants
 	static const QString& auth_success() { static QString str = "auth_success"; return str; }
 	static const QString& auth_failed() { static QString str = "auth_failed"; return str; }
 
+	static const QString& auth_date_time_format() { static QString str = "yyyy.MM.dd_hh:mm:ss.zzz"; return str; }
+
 	static const QString& request() { static QString str = "request: "; return str; }
 	static const QString& request_answ() { static QString str = "request_answ: "; return str; }
 
@@ -59,7 +61,7 @@ struct NetConstants
 
 	static const QString& request_synch_note() { static QString str = "synch_note"; return str; }
 	// клиент отправляет idOnServer и DtUpdated от нескольких заметок, сервер отвечает success
-	declare_struct_3_fields_move(SynchData, Note*, note, QString, idOnSever, QString, dtUpdatedStr);
+	declare_struct_2_fields_move(SynchData, QString, idOnSever, QString, dtUpdatedStr);
 	static QString MakeRequest_synch_note(std::vector<SynchData> datas);
 	static std::vector<SynchData> GetDataFromRequest_synch_note(const QString &text);
 	static QString request_synch_res_success() { static QString str = "1"; return str; }

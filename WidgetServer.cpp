@@ -83,7 +83,7 @@ WidgetServer::WidgetServer(QWidget *parent)
 
 void WidgetServer::ConnectDB()
 {
-	BaseData baseData = serverBase;
+	BaseData baseData = DataBase::defineBase(DataBase::server);
 	QString fileWithDB = MyQDifferent::PathToExe() + "/files/db.txt";
 	if(QFileInfo(fileWithDB).isFile())
 	{
@@ -152,18 +152,18 @@ void WidgetServer::SlotNewConnection(HttpClient *sock)
 void WidgetServer::SlotReadClient()
 {
 	HttpClient *sock = (HttpClient*)sender();
+
 	//Log("received:\n" + HttpCommon::GetFullText(sock->request));
-	Log("received target: " + sock->ReadTarget());
-	Log("received body: " + sock->ReadBody());
+	//Log("received target: " + sock->ReadTarget());
+	//Log("received body: " + sock->ReadBody());
 
-	static int i=0;
-	sock->bodyToWrite = "hallo from SlotReadClient " + QSn(i++);
-	Log(sock->bodyToWrite);
-	sock->readyWrite = true;
+	QString target = sock->ReadTarget();
+	QString readed = sock->ReadBody();
 
-	return;
+	bool authRes = NetClient::ChekAuth(target);
+	Log("auth res: "+QSn(authRes));
+	if(!authRes) { Log(", closing", true); sock->socket->close(); return; }
 
-	QString readed;
 	if(readed.endsWith(';')) readed.chop(1);
 	else
 	{
@@ -177,51 +177,38 @@ void WidgetServer::SlotReadClient()
 		command.replace(NetConstants::end_marker_replace(), NetConstants::end_marker());
 		Log("received command: " + command);
 
-		if(command.startsWith(NetConstants::auth()))
+		if(command.startsWith(NetConstants::msg()))
 		{
-			Log("auth data get, cheking passwd");
-
-			QStringRef hashedPasswdFromClient(&command, NetConstants::auth().size(), command.size() - NetConstants::auth().size());
-
-			QCryptographicHash hashCorretPasswd(QCryptographicHash::Md5);
-			hashCorretPasswd.addData(NetConstants::test_passwd().toUtf8());
-
-//			if(hashCorretPasswd.result().toHex() == hashedPasswdFromClient)
-//			{
-//				Log(NetConstants::auth_success());
-//				SendInSock(sock, NetConstants::auth_success(), true);
-
-//				if(lastUpdate.isValid())
-//					SendInSock(sock, NetConstants::last_update() + lastUpdate.toString(DateTimeFormat_ms), true);
-//				else SendInSock(sock, NetConstants::last_update() + NetConstants::invalid(), true);
-//			}
-//			else
-//			{
-//				Warning(NetConstants::auth_failed());
-//				SendInSock(sock, NetConstants::auth_failed(), true);
-//			}
-		}
-		else if(command.startsWith(NetConstants::msg()))
-		{
-			//MsgsWorker(sock, std::move(command));
+			MsgsWorker(sock, std::move(command));
 		}
 		else if(command.startsWith(NetConstants::request()))
 		{
-			//RequestsWorker(sock, std::move(command));
+			RequestsWorker(sock, std::move(command));
 		}
 		else if(command.startsWith(NetConstants::request_answ()))
 		{
-			//RequestsAnswersWorker(std::move(command));
+			RequestsAnswersWorker(std::move(command));
 		}
 		else
 		{
 			Warning("received unexpacted data from client {" + command + "}");
-			//SendInSock(sock, NetConstants::unexpacted(), true);
+			SendInSock(sock, NetConstants::unexpacted(), true);
 		}
 	}
 }
 
-void WidgetServer::MsgsWorker(QTcpSocket * sock, QString text)
+void WidgetServer::Write(ISocket *sock, const QString &str)
+{
+	if(auto castedSock = dynamic_cast<HttpClient*>(sock))
+	{
+		castedSock->bodyToWrite = str;
+		Log(castedSock->bodyToWrite);
+		castedSock->readyWrite = true;
+	}
+	else { Error("WidgetServer::Write executed with sock not HttpClient"); }
+}
+
+void WidgetServer::MsgsWorker(ISocket * sock, QString text)
 {
 	auto msgData = NetClient::DecodeMsg(text);
 	if(!msgData.errors.isEmpty())
@@ -234,19 +221,19 @@ void WidgetServer::MsgsWorker(QTcpSocket * sock, QString text)
 
 	if(auto it = msgWorkersMap.find(msgData.type); it != msgWorkersMap.end())
 	{
-		std::function<void(QTcpSocket *sock, QString &&)> &requestWorker = it->second;
+		std::function<void(ISocket *sock, QString &&)> &requestWorker = it->second;
 		requestWorker(sock, std::move(msgData.content));
 	}
 	else Error("Unrealesed requestData.type " + msgData.type);
 }
 
-void WidgetServer::msg_error_worker(QTcpSocket * /*sock*/, QString && msgContent)
+void WidgetServer::msg_error_worker(ISocket * /*sock*/, QString && msgContent)
 {
 	msgContent.prepend("Geted msg about error from client: ");
 	Error(msgContent);
 }
 
-void WidgetServer::msg_all_client_notes_synch_sended_worker(QTcpSocket * sock, QString && /*msgContent*/)
+void WidgetServer::msg_all_client_notes_synch_sended_worker(ISocket * /*sock*/, QString && /*msgContent*/)
 {
 	Error("//auto &clientData = clientsDatas[sock];");
 	//auto &clientData = clientsDatas[sock];
@@ -254,7 +241,7 @@ void WidgetServer::msg_all_client_notes_synch_sended_worker(QTcpSocket * sock, Q
 	Log("msg_all_client_notes_synch_sended get, lastSynchedNotesIdsOnServer cleared");
 }
 
-void WidgetServer::msg_highest_idOnServer_worker(QTcpSocket * sock, QString && msgContent)
+void WidgetServer::msg_highest_idOnServer_worker(ISocket * sock, QString && msgContent)
 {
 	auto table = DataBase::NotesWithHigherIdOnServer(msgContent);
 	Log("msg_highest_idOnServer get, count notes higher than on client: " + QSn(table.size()));
@@ -264,7 +251,7 @@ void WidgetServer::msg_highest_idOnServer_worker(QTcpSocket * sock, QString && m
 	}
 }
 
-void WidgetServer::RequestGetNote(QTcpSocket * sock, QString idOnServer)
+void WidgetServer::RequestGetNote(ISocket * sock, QString idOnServer)
 {
 	AnswerWorkerFunction answFoo = [this, idOnServer](QString &&answContent) {
 		if(answContent == NetConstants::invalid())
@@ -295,10 +282,10 @@ void WidgetServer::RequestGetNote(QTcpSocket * sock, QString idOnServer)
 	RequestInSock(sock, NetConstants::request_get_note(), std::move(idOnServer), std::move(answFoo));
 }
 
-void WidgetServer::request_try_create_group_worker(QTcpSocket * sock, NetClient::RequestData && requestData)
+void WidgetServer::request_try_create_group_worker(ISocket * sock, NetClient::RequestData && requestData)
 {
 	QString newGroupName = requestData.content;
-	int id = DataBase::TryCreateNewGroup(newGroupName, {});
+	int id = DataBase::TryCreateNewGlobalGroup(newGroupName, {});
 	if(id < 0)
 	{
 		Log("Group "+newGroupName+" not created");
@@ -311,7 +298,7 @@ void WidgetServer::request_try_create_group_worker(QTcpSocket * sock, NetClient:
 	}
 }
 
-void WidgetServer::request_create_note_on_server_worker(QTcpSocket * sock, NetClient::RequestData && requestData)
+void WidgetServer::request_create_note_on_server_worker(ISocket * sock, NetClient::RequestData && requestData)
 {
 	auto tmpNoteUptr = Note::LoadNote(requestData.content);
 	if(!tmpNoteUptr) {
@@ -333,7 +320,7 @@ void WidgetServer::request_create_note_on_server_worker(QTcpSocket * sock, NetCl
 	}
 }
 
-void WidgetServer::request_move_note_to_group_worker(QTcpSocket *sock, NetClient::RequestData && requestData)
+void WidgetServer::request_move_note_to_group_worker(ISocket *sock, NetClient::RequestData && requestData)
 {
 	auto decoded = NetConstants::GetDataFromRequest_move_note_to_group(requestData.content);
 	if(decoded.idNoteOnServer.isEmpty() || decoded.idNewGroup.isEmpty() || decoded.dtLastUpdatedStr.isEmpty())
@@ -349,7 +336,7 @@ void WidgetServer::request_move_note_to_group_worker(QTcpSocket *sock, NetClient
 		return;
 	}
 
-	if(decoded.idNewGroup == DataBase::DefaultGroupId()) // в дефолтную группу, удаляем
+	if(decoded.idNewGroup == DataBase::DefaultGroupId2()) // в дефолтную группу, удаляем
 	{
 		if(DataBase::RemoveNoteOnServer(decoded.idNoteOnServer, true))
 		{
@@ -377,7 +364,7 @@ void WidgetServer::request_move_note_to_group_worker(QTcpSocket *sock, NetClient
 	}
 }
 
-void WidgetServer::request_remove_note_worker(QTcpSocket * sock, NetClient::RequestData && requestData)
+void WidgetServer::request_remove_note_worker(ISocket * sock, NetClient::RequestData && requestData)
 {
 	if(DataBase::RemoveNoteOnServer(requestData.content, true))
 	{
@@ -391,7 +378,7 @@ void WidgetServer::request_remove_note_worker(QTcpSocket * sock, NetClient::Requ
 	}
 }
 
-void WidgetServer::request_note_saved_worker(QTcpSocket * sock, NetClient::RequestData && requestData)
+void WidgetServer::request_note_saved_worker(ISocket * sock, NetClient::RequestData && requestData)
 {
 	auto note_uptr = Note::LoadNote(requestData.content);
 	if(note_uptr)
@@ -415,7 +402,7 @@ void WidgetServer::request_note_saved_worker(QTcpSocket * sock, NetClient::Reque
 	}
 }
 
-void WidgetServer::request_synch_note_worker(QTcpSocket * sock, NetClient::RequestData && requestData)
+void WidgetServer::request_synch_note_worker(ISocket * sock, NetClient::RequestData && requestData)
 {
 	Log("request_synch_note_worker: "+requestData.content);
 
@@ -484,12 +471,12 @@ void WidgetServer::request_synch_note_worker(QTcpSocket * sock, NetClient::Reque
 
 }
 
-void WidgetServer::Command_to_client_remove_note(QTcpSocket * sock, const QString & idOnClient)
+void WidgetServer::Command_to_client_remove_note(ISocket * sock, const QString & idOnClient)
 {
 	SendInSock(sock, NetClient::PrepareCommandToClient(NetConstants::command_remove_note(), idOnClient), true);
 }
 
-void WidgetServer::Command_to_client_update_note(QTcpSocket * sock, const Note & note)
+void WidgetServer::Command_to_client_update_note(ISocket * sock, const Note & note)
 {
 	QString command = NetClient::PrepareCommandToClient(NetConstants::command_update_note(), note.ToStr_v1());
 	SendInSock(sock, command, true);

@@ -4,6 +4,7 @@
 
 #include "LaunchParams.h"
 #include "Resources.h"
+#include "DevNames.h"
 
 const BaseData clientBaseRegularHome {"Client base",
 									"D:\\Documents\\C++ QT\\Notes\\Client base.mdb",
@@ -33,9 +34,10 @@ const BaseData serverBaseDebugWork {"Server base debug",
 									"C:\\Work\\C++\\NotesServer\\Server base debug.mdb",
 									"C:\\Work\\C++\\NotesServer\\storage_debug"};
 
-bool debug = false;
 #ifdef QT_DEBUG
-debug=true;
+bool debug = true;
+#else
+bool debug = false;
 #endif
 
 BaseData DataBase::defineBase(workModes mode)
