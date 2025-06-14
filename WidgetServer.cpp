@@ -108,9 +108,7 @@ void WidgetServer::StartServer()
 	connect(&server, &HttpServer::SignalNewConnection, this, &WidgetServer::SlotNewConnection);
 
 	server.logFoo = [this](const QString &str){
-		QMetaObject::invokeMethod(textEdit, [this, str]() {
-			textEdit->append(str);
-		});
+		QMetaObject::invokeMethod(textEdit, [this, str]() { Log(str); });
 	};
 
 	int port = 25002;
@@ -146,6 +144,9 @@ void WidgetServer::SlotNewConnection(HttpClient *sock)
 	connect(sock, &HttpClient::SignalReadyRead, this, &WidgetServer::SlotReadClient);
 	clientsDatas[sock] = {};
 
+	sock->logFoo = [this](const QString &str){ QMetaObject::invokeMethod(textEdit, [this, str]() { Log(str); }); };
+	sock->errorFoo = [this](const QString &str){ QMetaObject::invokeMethod(textEdit, [this, str]() { Error(str); }); };
+
 	Log("new connection processed: " + MyQString::AsDebug(sock));
 }
 
@@ -170,29 +171,35 @@ void WidgetServer::SlotReadClient()
 		Error("get unfinished data ["+readed+"]");
 		return;
 	}
-	auto commands = readed.split(';');
+	auto msgs = readed.split(';');
 
-	for(auto &command:commands)
+	for(auto &msg:msgs)
 	{
-		command.replace(NetConstants::end_marker_replace(), NetConstants::end_marker());
-		Log("received command: " + command);
+		msg.replace(NetConstants::end_marker_replace(), NetConstants::end_marker());
+		Log("received message: " + msg);
 
-		if(command.startsWith(NetConstants::msg()))
+		if(msg.startsWith(NetConstants::msg()))
 		{
-			MsgsWorker(sock, std::move(command));
+			MsgsWorker(sock, std::move(msg));
 		}
-		else if(command.startsWith(NetConstants::request()))
+		else if(msg.startsWith(NetConstants::request()))
 		{
-			RequestsWorker(sock, std::move(command));
+			RequestsWorker(sock, std::move(msg));
 		}
-		else if(command.startsWith(NetConstants::request_answ()))
+		else if(msg.startsWith(NetConstants::request_answ()))
 		{
-			RequestsAnswersWorker(std::move(command));
+			RequestsAnswersWorker(std::move(msg));
 		}
 		else
 		{
-			Warning("received unexpacted data from client {" + command + "}");
+			Warning("received unexpacted data from client {" + msg + "}");
 			SendInSock(sock, NetConstants::unexpacted(), true);
+			MyCppDifferent::sleep_ms(100);
+			SendInSock(sock, "1fghfghfgh11", true);
+			MyCppDifferent::sleep_ms(100);
+			SendInSock(sock, "2222", true);
+			MyCppDifferent::sleep_ms(100);
+			SendInSock(sock, "33333", true);
 		}
 	}
 }
@@ -201,9 +208,9 @@ void WidgetServer::Write(ISocket *sock, const QString &str)
 {
 	if(auto castedSock = dynamic_cast<HttpClient*>(sock))
 	{
-		castedSock->bodyToWrite = str;
-		Log(castedSock->bodyToWrite);
-		castedSock->readyWrite = true;
+		castedSock->Write(QString(str));
+		return;
+		CodeMarkers::to_do("optimisation QString(str)");
 	}
 	else { Error("WidgetServer::Write executed with sock not HttpClient"); }
 }
@@ -336,7 +343,8 @@ void WidgetServer::request_move_note_to_group_worker(ISocket *sock, NetClient::R
 		return;
 	}
 
-	if(decoded.idNewGroup == DataBase::DefaultGroupId2()) // в дефолтную группу, удаляем
+	// в локальную группу, удаляем
+	if(decoded.idNewGroup == DataBase::IsGroupLocalById(decoded.idNewGroup))
 	{
 		if(DataBase::RemoveNoteOnServer(decoded.idNoteOnServer, true))
 		{
@@ -349,7 +357,7 @@ void WidgetServer::request_move_note_to_group_worker(ISocket *sock, NetClient::R
 			AnswerForRequestSending(sock, requestData, NetConstants::not_did());
 		}
 	}
-	else // не в дефолтную, перемещаем
+	else // не в локальную, перемещаем
 	{
 		if(DataBase::MoveNoteToGroupOnServer(decoded.idNoteOnServer, decoded.idNewGroup, decoded.dtLastUpdatedStr))
 		{
@@ -460,7 +468,7 @@ void WidgetServer::request_synch_note_worker(ISocket * sock, NetClient::RequestD
 	}
 
 	/// Если на сервере имеются заметки которых нет у клиента -
-	///		значит они были созданы другим клиентом создаем их на клиенте.
+	///		значит они возможно были созданы другим клиентом создаем их на клиенте.
 	///
 	///		idOnServer в возрастающем порядке
 	///		значит можно сверять максимальный idOnServer,
@@ -469,6 +477,16 @@ void WidgetServer::request_synch_note_worker(ISocket * sock, NetClient::RequestD
 	///		все равно какая-то дрочь, ведь заметки могут перемещаться по группам и изза этого хуйпойми
 	///		поговорю с чатом как такое делают
 
+}
+
+void WidgetServer::request_polly_worker(ISocket *sock, Requester::RequestData &&requestData)
+{
+	if(auto castedSock = dynamic_cast<HttpClient*>(sock))
+	{
+		castedSock->pollyWriter = castedSock;
+		castedSock->pollyRequestData = std::move(requestData);
+	}
+	else { Error("WidgetServer::Write executed with sock not HttpClient"); }
 }
 
 void WidgetServer::Command_to_client_remove_note(ISocket * sock, const QString & idOnClient)

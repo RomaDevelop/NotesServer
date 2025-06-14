@@ -41,20 +41,77 @@ public:
 	~HttpClient() { }
 
 	std::function<void(const QString &str)> logFoo;
+	std::function<void(const QString &str)> errorFoo;
 	void Log(const QString &str) { if(logFoo) logFoo(str); else qdbg << str; }
-	void Error(const QString &str) { if(logFoo) logFoo(str); /*else*/ qdbg << str; }
+	void Error(const QString &str) { if(errorFoo) errorFoo(str); /*else*/ qdbg << str; }
 
 	tcp::socket *socket = nullptr;
 	http::request<http::string_body> request;
 	QString ReadTarget() { return QString::fromStdString(request.target().to_string()); }
 	QString ReadBody() { return QString::fromStdString(request.body()); }
 
+private:
 	bool readyWrite = false;
 	QString bodyToWrite;
 
+	bool whaitsForWrite = false;
+signals: void SignalReadyRead();
+
+
+public:
+	void EmitSignalReadyRead()
+	{
+		whaitsForWrite = true;
+		emit SignalReadyRead();
+	}
+
+	bool ReadyWrite() { return readyWrite; }
+
+	inline static Requester::RequestData pollyRequestData;
+	inline static HttpClient *pollyWriter;
+
+	void Write(QString &&text)
+	{
+		if(readyWrite) { Error("Write(QString &&text) called when readyWrite"); return; }
+		if(!whaitsForWrite)
+		{
+			if(pollyRequestData.id.isEmpty()) { Error("Write(QString &&text) called when not whaitsForWrite"); return; }
+			else
+			{
+				text.prepend(pollyRequestData.id.append(" "));
+				text.prepend(NetConstants::request_answ());
+
+				pollyRequestData.id.clear();
+
+				pollyWriter->bodyToWrite = std::move(text);
+				pollyWriter->readyWrite = true;
+				return;
+			}
+		}
+
+		bodyToWrite = std::move(text);
+		readyWrite = true;
+	}
+	void Write_for_HttpServer()
+	{
+		http::response<http::string_body> res{http::status::ok, request.version()};
+		res.set(http::field::server, "Boost.Beast");
+		res.set(http::field::content_type, "text/plain");
+		res.set(http::field::connection, "keep-alive");
+		res.body() = bodyToWrite.toStdString();
+
+		bodyToWrite.clear();
+
+		res.prepare_payload();
+
+		http::write(*socket, res);
+		readyWrite = false;
+		whaitsForWrite = false;
+	}
+
 signals:
 	void SignalDisconnected();
-	void SignalReadyRead();
+
 };
 
 struct HttpClientGuard

@@ -68,6 +68,7 @@ private:
 	void request_remove_note_worker(ISocket *sock, NetClient::RequestData && requestData);
 	void request_note_saved_worker(ISocket *sock, NetClient::RequestData && requestData);
 	void request_synch_note_worker(ISocket *sock, NetClient::RequestData && requestData);
+	void request_polly_worker(ISocket *sock, NetClient::RequestData && requestData);
 
 	std::map<QStringRefWr_const, std::function<void(ISocket *sock, NetClient::RequestData &&requestData)>> requestWorkersMap {
 		{ std::cref(NetConstants::request_try_create_group()), [this](ISocket *sock, NetClient::RequestData &&requestData){ request_try_create_group_worker(sock, std::move(requestData)); } },
@@ -76,6 +77,7 @@ private:
 		{ std::cref(NetConstants::request_remove_note()), [this](ISocket *sock, NetClient::RequestData &&requestData){ request_remove_note_worker(sock, std::move(requestData)); } },
 		{ std::cref(NetConstants::request_note_saved()), [this](ISocket *sock, NetClient::RequestData &&requestData){ request_note_saved_worker(sock, std::move(requestData)); } },
 		{ std::cref(NetConstants::request_synch_note()), [this](ISocket *sock, NetClient::RequestData &&requestData){ request_synch_note_worker(sock, std::move(requestData)); } },
+		{ std::cref(NetConstants::request_polly()), [this](ISocket *sock, NetClient::RequestData &&requestData){ request_polly_worker(sock, std::move(requestData)); } },
 
 	};
 	virtual std::map<QStringRefWr_const, std::function<void(ISocket *sock, RequestData &&requestData)>> & RequestWorkersMap() override { return requestWorkersMap; }

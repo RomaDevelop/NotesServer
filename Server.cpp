@@ -73,26 +73,15 @@ void HttpServer::handle_session(tcp::socket socket) {
 			http::read(socket, buffer, request);
 
 			clientGuard.client->request = request;
-			emit clientGuard.client->SignalReadyRead();
+			clientGuard.client->EmitSignalReadyRead();
 
-			while (!client->readyWrite && !stopFlag) {
+			while (!client->ReadyWrite() && !stopFlag) {
 				MyCppDifferent::sleep_ms(10);
 			}
 
 			if(stopFlag) break;
 
-			http::response<http::string_body> res{http::status::ok, request.version()};
-			res.set(http::field::server, "Boost.Beast");
-			res.set(http::field::content_type, "text/plain");
-			res.set(http::field::connection, "keep-alive");
-			res.body() = client->bodyToWrite.toStdString();
-
-			client->bodyToWrite.clear();
-			client->readyWrite = false;
-
-			res.prepare_payload();
-
-			http::write(socket, res);
+			clientGuard.client->Write_for_HttpServer();
 
 			if (!request.keep_alive()) break;  // клиент просит закрыть
 		}

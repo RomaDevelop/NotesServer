@@ -67,6 +67,8 @@ struct NetConstants
 	static QString request_synch_res_success() { static QString str = "1"; return str; }
 	static QString request_synch_res_error() { static QString str = "0"; return str; }
 
+	static const QString& request_polly() { static QString str = "polly"; return str; }
+
 	static const std::set<QStringRefWr_const>& allReuestTypes() { // сет нужен, нельзя заменить мапой из сервера потому что используется в клиенте
 		static std::set<QStringRefWr_const> setSinglton {
 					std::cref(request_try_create_group()),
@@ -76,6 +78,7 @@ struct NetConstants
 					std::cref(request_note_saved()),
 					std::cref(request_get_note()),
 					std::cref(request_synch_note()),
+					std::cref(request_polly()),
 		};
 		return setSinglton;
 	}
