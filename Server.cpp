@@ -81,7 +81,7 @@ void HttpServer::handle_session(tcp::socket socket) {
 
 			if(stopFlag) break;
 
-			clientGuard.client->Write_for_HttpServer();
+			clientGuard.client->Write_in_HttpServerHandler();
 
 			if (!request.keep_alive()) break;  // клиент просит закрыть
 		}
@@ -97,4 +97,60 @@ void HttpServer::handle_session(tcp::socket socket) {
 	mtxActiveSockets.unlock();
 
 	Log("HttpServer::handle_session end");
+}
+
+void HttpClient::Write(QString &&text, bool forcePolly)
+{
+	if(hasPreparedDataToWrite) { Error("HttpClient::Write: called when hasPreparedDataToWrite"); return; }
+	if(canSendNow && !forcePolly)
+	{
+		Log("HttpClient::Write: regular answering now: " + text);
+		bodyToWrite = std::move(text);
+		hasPreparedDataToWrite = true;
+	}
+	else
+	{
+		if(!pollyRequestData.id.isEmpty())
+		{
+			if(!pollyWriter) { Error("HttpClient::Write: try write polly to invalid pollyWriter: " + text); return; }
+			Log("HttpClient::Write: sending by polly now: " + text);
+
+			pollyWriter->bodyToWrite.clear();
+			pollyWriter->bodyToWrite.append(NetConstants::request_answ()).append(pollyRequestData.id).append(" ").append(text);
+
+			pollyRequestData.id.clear();
+
+			pollyWriter->hasPreparedDataToWrite = true;
+		}
+		else
+		{
+			if(waitsPollyToWrite.size() > 100)
+			{
+				Error("HttpClient::Write:  waitsPollyToWrite is full, remove 10");
+				for (int i = 0; i < 10; ++i) waitsPollyToWrite.pop();
+			}
+
+			Log("HttpClient::Write: message will wait polly: "+text);
+			waitsPollyToWrite.emplace(std::move(text));
+		}
+	}
+}
+
+void HttpClient::Write_in_HttpServerHandler()
+{
+	http::response<http::string_body> res{http::status::ok, request.version()};
+	res.set(http::field::server, "Boost.Beast");
+	res.set(http::field::content_type, "text/plain");
+	res.set(http::field::connection, "keep-alive");
+	res.body() = bodyToWrite.toStdString();
+
+	bodyToWrite.clear();
+
+	res.prepare_payload();
+
+	http::write(*socket, res);
+	hasPreparedDataToWrite = false;
+	canSendNow = false;
+
+	if(pollyWriter && pollyWriter->socket == socket) pollyWriter = {};
 }

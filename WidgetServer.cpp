@@ -120,18 +120,21 @@ void WidgetServer::Log(const QString &str, bool appendInLastRow)
 	if(appendInLastRow) MyQTextEdit::AppendInLastRow(textEdit, str);
 	else textEdit->append(str);
 	MyQTextEdit::ColorizeLastCount(textEdit, Qt::black, str.size());
+	//qdbg << "log" << str;
 }
 
 void WidgetServer::Error(const QString &str)
 {
 	textEdit->append(str);
 	MyQTextEdit::ColorizeLastCount(textEdit, Qt::red, str.size());
+	//qdbg << "Error" << str;
 }
 
 void WidgetServer::Warning(const QString &str)
 {
 	textEdit->append(str);
 	MyQTextEdit::ColorizeLastCount(textEdit, Qt::blue, str.size());
+	//qdbg << "Warning" << str;
 }
 
 void WidgetServer::SlotNewConnection(HttpClient *sock)
@@ -162,8 +165,14 @@ void WidgetServer::SlotReadClient()
 	QString readed = sock->ReadBody();
 
 	bool authRes = NetClient::ChekAuth(target);
-	Log("auth res: "+QSn(authRes));
-	if(!authRes) { Log(", closing", true); sock->socket->close(); return; }
+	Log(QString("auth res: ").append(authRes ? "success" : "fail"));
+	if(authRes) sock->authFailCount = 0;
+	else
+	{
+		sock->authFailCount++;
+		if(sock->authFailCount > 5) { sock->socket->close(); return; }
+		else { SendInSock(sock, NetConstants::auth_failed(), true); return; }
+	}
 
 	if(readed.endsWith(';')) readed.chop(1);
 	else
@@ -485,8 +494,20 @@ void WidgetServer::request_polly_worker(ISocket *sock, Requester::RequestData &&
 	{
 		castedSock->pollyWriter = castedSock;
 		castedSock->pollyRequestData = std::move(requestData);
+
+		if(!castedSock->waitsPollyToWrite.empty())
+		{
+			QString toWrite = std::move(castedSock->waitsPollyToWrite.front());
+			castedSock->waitsPollyToWrite.pop();
+			Log("request_polly_worker: sending by polly: " + (toWrite == " " ? "_space_" : toWrite));
+			castedSock->Write(std::move(toWrite), true);
+		}
+		else
+		{
+			//Log("request_polly_worker waitsPollyToWrite is empty");
+		}
 	}
-	else { Error("WidgetServer::Write executed with sock not HttpClient"); }
+	else { Error("WidgetServer::request_polly_worker executed with sock not HttpClient"); }
 }
 
 void WidgetServer::Command_to_client_remove_note(ISocket * sock, const QString & idOnClient)

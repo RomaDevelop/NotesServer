@@ -50,64 +50,31 @@ public:
 	QString ReadTarget() { return QString::fromStdString(request.target().to_string()); }
 	QString ReadBody() { return QString::fromStdString(request.body()); }
 
+	uint8_t authFailCount;
+
 private:
-	bool readyWrite = false;
+	bool hasPreparedDataToWrite = false;
 	QString bodyToWrite;
 
-	bool whaitsForWrite = false;
+	bool canSendNow = false;
 signals: void SignalReadyRead();
 
 
 public:
 	void EmitSignalReadyRead()
 	{
-		whaitsForWrite = true;
+		canSendNow = true;
 		emit SignalReadyRead();
 	}
 
-	bool ReadyWrite() { return readyWrite; }
+	bool ReadyWrite() { return hasPreparedDataToWrite; }
 
 	inline static Requester::RequestData pollyRequestData;
-	inline static HttpClient *pollyWriter;
+	inline static HttpClient *pollyWriter {};
+	inline static std::queue<QString> waitsPollyToWrite;
 
-	void Write(QString &&text)
-	{
-		if(readyWrite) { Error("Write(QString &&text) called when readyWrite"); return; }
-		if(!whaitsForWrite)
-		{
-			if(pollyRequestData.id.isEmpty()) { Error("Write(QString &&text) called when not whaitsForWrite"); return; }
-			else
-			{
-				text.prepend(pollyRequestData.id.append(" "));
-				text.prepend(NetConstants::request_answ());
-
-				pollyRequestData.id.clear();
-
-				pollyWriter->bodyToWrite = std::move(text);
-				pollyWriter->readyWrite = true;
-				return;
-			}
-		}
-
-		bodyToWrite = std::move(text);
-		readyWrite = true;
-	}
-	void Write_for_HttpServer()
-	{
-		http::response<http::string_body> res{http::status::ok, request.version()};
-		res.set(http::field::server, "Boost.Beast");
-		res.set(http::field::content_type, "text/plain");
-		res.set(http::field::connection, "keep-alive");
-		res.body() = bodyToWrite.toStdString();
-
-		bodyToWrite.clear();
-
-		res.prepare_payload();
-
-		http::write(*socket, res);
-		readyWrite = false;
-		whaitsForWrite = false;
-	}
+	void Write(QString &&text, bool forcePolly = false);
+	void Write_in_HttpServerHandler();
 
 signals:
 	void SignalDisconnected();
