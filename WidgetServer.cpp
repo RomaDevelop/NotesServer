@@ -19,6 +19,7 @@
 #include "MyQTextEdit.h"
 #include "MyCppDifferent.h"
 #include "CodeMarkers.h"
+#include "TextEditCleaner.h"
 
 #include "Note.h"
 #include "DataBase.h"
@@ -51,7 +52,8 @@ WidgetServer::WidgetServer(QWidget *parent)
 	QPushButton *btnSqlClearNotes = new QPushButton(" clear notes ");
 	hlo1->addWidget(btnSqlClearNotes);
 	connect(btnSqlClearNotes,&QPushButton::clicked,[](){
-		DataBase::DoSqlQuery("delete from " + Fields::Notes());
+		QMbError("disabled");
+		//DataBase::DoSqlQuery("delete from " + Fields::Notes());
 	});
 
 	QPushButton *btnDB = new QPushButton(" DB ");
@@ -70,6 +72,8 @@ WidgetServer::WidgetServer(QWidget *parent)
 	textEdit = new QTextEdit;
 	textEdit->setTabStopDistance(40);
 	hlo2->addWidget(textEdit);
+
+	new TextEditCleaner(textEdit, 10000, textEdit);
 
 	ConnectDB();
 	StartServer();
@@ -157,6 +161,7 @@ void WidgetServer::SlotReadClient()
 {
 	HttpClient *sock = (HttpClient*)sender();
 
+	Log("SlotReadClient");
 	//Log("received:\n" + HttpCommon::GetFullText(sock->request));
 	//Log("received target: " + sock->ReadTarget());
 	//Log("received body: " + sock->ReadBody());
@@ -202,13 +207,13 @@ void WidgetServer::SlotReadClient()
 		else
 		{
 			Warning("received unexpacted data from client {" + msg + "}");
-			SendInSock(sock, NetConstants::unexpacted(), true);
-			MyCppDifferent::sleep_ms(100);
-			SendInSock(sock, "1fghfghfgh11", true);
-			MyCppDifferent::sleep_ms(100);
-			SendInSock(sock, "2222", true);
-			MyCppDifferent::sleep_ms(100);
-			SendInSock(sock, "33333", true);
+//			SendInSock(sock, NetConstants::unexpacted(), true);
+//			MyCppDifferent::sleep_ms(100);
+//			SendInSock(sock, "1fghfghfgh11", true);
+//			MyCppDifferent::sleep_ms(100);
+//			SendInSock(sock, "2222", true);
+//			MyCppDifferent::sleep_ms(100);
+//			SendInSock(sock, "33333", true);
 		}
 	}
 }
@@ -492,6 +497,8 @@ void WidgetServer::request_polly_worker(ISocket *sock, Requester::RequestData &&
 {
 	if(auto castedSock = dynamic_cast<HttpClient*>(sock))
 	{
+		castedSock->pollyRequestGetAt = QDateTime::currentDateTime();
+		//Log(">>> HttpClient::pollyRequestGetA: " + HttpClient::pollyRequestGetAt.toString(DateTimeFormat_ms));
 		castedSock->pollyWriter = castedSock;
 		castedSock->pollyRequestData = std::move(requestData);
 

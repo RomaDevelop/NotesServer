@@ -2,9 +2,15 @@
 
 #include <iostream>
 
+#include <QCoreApplication>
+
 #include <MyCppDifferent.h>
 
 
+HttpServer::HttpServer(QObject *parent) : QObject(parent)
+{
+	HttpClient::InitPollyCloser(this);
+}
 
 void HttpServer::start(unsigned short port) {
 	if (running) return;
@@ -99,9 +105,48 @@ void HttpServer::handle_session(tcp::socket socket) {
 	Log("HttpServer::handle_session end");
 }
 
+HttpClient::~HttpClient()
+{
+	if(pollyWriter == this)
+	{
+		pollyRequestData.id.clear();
+		pollyWriter = {};
+	}
+}
+
+void HttpClient::InitPollyCloser(HttpServer *server)
+{
+	HttpClient::pollyCloserTimer = new QTimer(server);
+	connect(HttpClient::pollyCloserTimer, &QTimer::timeout, [server](){
+		if(!HttpClient::pollyRequestData.id.isEmpty())
+		{
+			if(HttpClient::pollyRequestGetAt.addMSecs(HttpClient::pollyMaxWaitMs) <= QDateTime::currentDateTime())
+			{
+//				server->Log(">>> write polly answ: pollyRequestGetAt: " + HttpClient::pollyRequestGetAt.toString(DateTimeFormat_ms)
+//							+ "\n\t" + HttpClient::pollyRequestGetAt.addMSecs(HttpClient::pollyMaxWaitMs).toString(DateTimeFormat_ms) + " <= "
+//							+ QDateTime::currentDateTime().toString(DateTimeFormat_ms));
+
+				if(HttpClient::pollyWriter) HttpClient::pollyWriter->Write("nothing", true);
+				else server->Error("InitPollyCloser: HttpClient::pollyWriter invalid");
+			}
+		}
+	});
+	HttpClient::pollyCloserTimer->start(HttpClient::pollyCloserTimeoutMs);
+}
+
 void HttpClient::Write(QString &&text, bool forcePolly)
 {
-	if(hasPreparedDataToWrite) { Error("HttpClient::Write: called when hasPreparedDataToWrite"); return; }
+	// если сейчас идет отправка, ждем 3 секунды чтобы завершилась
+	if(hasPreparedDataToWrite) {
+		for(int i=0; i<300 && hasPreparedDataToWrite; i++)
+		{
+			if(i%10 == 0) QCoreApplication::processEvents();
+			MyCppDifferent::sleep_ms(10);
+		}
+		if(hasPreparedDataToWrite) { Error("HttpClient::Write: called when hasPreparedDataToWrite"); return; }
+		// если не завершилась - выдаем ошибку
+	}
+
 	if(canSendNow && !forcePolly)
 	{
 		Log("HttpClient::Write: regular answering now: " + text);

@@ -20,6 +20,7 @@ HEADERS += \
     ../Notes/FastActions.h \
     ../Notes/NetClient.h \
     ../Notes/Note.h \
+    ../include/TextEditCleaner.h \
     DataBase.h \
     Fields.h \
     NetConstants.h \

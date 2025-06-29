@@ -33,12 +33,14 @@ struct HttpCommon
 	}
 };
 
+class HttpServer;
+
 class HttpClient : public QObject, public ISocket
 {
 	Q_OBJECT
 public:
 	explicit HttpClient(tcp::socket *socket, QObject *parent = nullptr) : QObject(parent), socket{socket} { }
-	~HttpClient() { }
+	~HttpClient();
 
 	std::function<void(const QString &str)> logFoo;
 	std::function<void(const QString &str)> errorFoo;
@@ -53,7 +55,7 @@ public:
 	uint8_t authFailCount;
 
 private:
-	bool hasPreparedDataToWrite = false;
+	volatile bool hasPreparedDataToWrite = false;
 	QString bodyToWrite;
 
 	bool canSendNow = false;
@@ -71,6 +73,12 @@ public:
 
 	inline static Requester::RequestData pollyRequestData;
 	inline static HttpClient *pollyWriter {};
+	inline static QDateTime pollyRequestGetAt;
+	inline static QTimer *pollyCloserTimer {};
+	inline static void InitPollyCloser(HttpServer *server);
+	inline static const int pollyCloserTimeoutMs = 100;
+	//inline static const int pollyMaxWaitMs = 6000;
+	inline static const int pollyMaxWaitMs = 25000;
 	inline static std::queue<QString> waitsPollyToWrite;
 
 	void Write(QString &&text, bool forcePolly = false);
@@ -101,7 +109,7 @@ class HttpServer : public QObject
 {
 	Q_OBJECT
 public:
-	explicit HttpServer(QObject *parent = nullptr) : QObject(parent) { }
+	explicit HttpServer(QObject *parent = nullptr);
 	~HttpServer() { stop(); }
 
 	std::function<void(const QString &str)> logFoo;
