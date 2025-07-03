@@ -48,6 +48,10 @@ private:
 
 	std::map<HttpClient*, ClientData> clientsDatas;
 
+	qint64 sessionIdCounter = 1;
+	std::map<HttpClient*, qint64> clientsSessionsIds;
+	int GetSessionId(HttpClient *client);
+
 	void MsgsWorker(ISocket *sock, QString text);
 
 	void msg_error_worker(ISocket *sock, QString && msgContent);
@@ -62,6 +66,7 @@ private:
 
 	void RequestGetNote(ISocket * sock, QString idOnServer);
 
+	void request_get_session_id_worker(ISocket *sock, NetClient::RequestData && requestData);
 	void request_try_create_group_worker(ISocket *sock, NetClient::RequestData && requestData);
 	void request_create_note_on_server_worker(ISocket *sock, NetClient::RequestData && requestData);
 	void request_move_note_to_group_worker(ISocket *sock, NetClient::RequestData && requestData);
@@ -71,6 +76,7 @@ private:
 	void request_polly_worker(ISocket *sock, NetClient::RequestData && requestData);
 
 	std::map<QStringRefWr_const, std::function<void(ISocket *sock, NetClient::RequestData &&requestData)>> requestWorkersMap {
+		{ std::cref(NetConstants::request_get_session_id()), [this](ISocket *sock, NetClient::RequestData &&requestData){ request_get_session_id_worker(sock, std::move(requestData)); } },
 		{ std::cref(NetConstants::request_try_create_group()), [this](ISocket *sock, NetClient::RequestData &&requestData){ request_try_create_group_worker(sock, std::move(requestData)); } },
 		{ std::cref(NetConstants::request_create_note_on_server()), [this](ISocket *sock, NetClient::RequestData &&requestData){ request_create_note_on_server_worker(sock, std::move(requestData)); } },
 		{ std::cref(NetConstants::request_move_note_to_group()), [this](ISocket *sock, NetClient::RequestData &&requestData){ request_move_note_to_group_worker(sock, std::move(requestData)); } },

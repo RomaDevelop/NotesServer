@@ -77,8 +77,6 @@ public:
 	inline static QTimer *pollyCloserTimer {};
 	inline static void InitPollyCloser(HttpServer *server);
 	inline static const int pollyCloserTimeoutMs = 100;
-	//inline static const int pollyMaxWaitMs = 6000;
-	inline static const int pollyMaxWaitMs = 25000;
 	inline static std::queue<QString> waitsPollyToWrite;
 
 	void Write(QString &&text, bool forcePolly = false);
@@ -113,8 +111,9 @@ public:
 	~HttpServer() { stop(); }
 
 	std::function<void(const QString &str)> logFoo;
+	std::function<void(const QString &str)> errorFoo;
 	void Log(const QString &str) { if(logFoo) logFoo(str); else qdbg << str; }
-	void Error(const QString &str) { if(logFoo) logFoo(str); /*else*/ qdbg << str; }
+	void Error(const QString &str) { if(errorFoo) errorFoo(str); /*else*/ qdbg << str; }
 
 	void start(unsigned short port);
 	void stop();

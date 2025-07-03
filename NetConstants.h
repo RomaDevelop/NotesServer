@@ -28,13 +28,14 @@ struct NetConstants
 	static const QString& not_did() { static QString str = "not_did"; return str; }
 
 	static const QString& auth() { static QString str = "auth: "; return str; }
-	static const QString& auth_success() { static QString str = "auth_success"; return str; }
 	static const QString& auth_failed() { static QString str = "auth_failed"; return str; }
 
 	static const QString& auth_date_time_format() { static QString str = "yyyy.MM.dd_hh:mm:ss.zzz"; return str; }
 
 	static const QString& request() { static QString str = "request: "; return str; }
 	static const QString& request_answ() { static QString str = "request_answ: "; return str; }
+
+	static const QString& request_get_session_id() { static QString str = "request_get_session_id"; return str; }
 
 	static const QString& request_try_create_group() { static QString str = "request_try_create_group"; return str; }
 	static QString MakeAnsw_try_create_group(const QString& groupId) { return QString(NetConstants::success()).append(' ').append(groupId); }
@@ -71,6 +72,7 @@ struct NetConstants
 
 	static const std::set<QStringRefWr_const>& allReuestTypes() { // сет нужен, нельзя заменить мапой из сервера потому что используется в клиенте
 		static std::set<QStringRefWr_const> setSinglton {
+					std::cref(request_get_session_id()),
 					std::cref(request_try_create_group()),
 					std::cref(request_create_note_on_server()),
 					std::cref(request_move_note_to_group()),
@@ -106,12 +108,15 @@ struct NetConstants
 
 	static qint64 GetInt64_IfFirstWordIsSuccess(const QString& text);
 
-	static const QString& last_update() { static QString str = "last_update: "; return str; }
+	static const QString& nothing() { static QString str = "nothing"; return str; }
 
-	static const QString& unexpacted() { static QString str = "unexpacted"; return str; }
+	static const QString& unexpected() { static QString str = "unexpected"; return str; }
 
 	static const QString& end_marker() { static QString str = ";"; return str; }
 	static const QString& end_marker_replace() { static QString str = "#%&0"; return str; }
+
+	static const int pollyMaxWaitServerMs;
+	static const int pollyMaxWaitClientMs;
 };
 
 

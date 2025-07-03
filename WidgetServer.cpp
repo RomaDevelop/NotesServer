@@ -114,6 +114,9 @@ void WidgetServer::StartServer()
 	server.logFoo = [this](const QString &str){
 		QMetaObject::invokeMethod(textEdit, [this, str]() { Log(str); });
 	};
+	server.errorFoo = [this](const QString &str){
+		QMetaObject::invokeMethod(textEdit, [this, str]() { Error(str); });
+	};
 
 	int port = 25002;
 	server.start(port);
@@ -161,7 +164,7 @@ void WidgetServer::SlotReadClient()
 {
 	HttpClient *sock = (HttpClient*)sender();
 
-	Log("SlotReadClient");
+	//Log("SlotReadClient");
 	//Log("received:\n" + HttpCommon::GetFullText(sock->request));
 	//Log("received target: " + sock->ReadTarget());
 	//Log("received body: " + sock->ReadBody());
@@ -169,14 +172,23 @@ void WidgetServer::SlotReadClient()
 	QString target = sock->ReadTarget();
 	QString readed = sock->ReadBody();
 
-	bool authRes = NetClient::ChekAuth(target);
+	auto targetContent = NetClient::DecodeTarget(target);
+
+	bool authRes = NetClient::ChekAuth(targetContent);
 	Log(QString("auth res: ").append(authRes ? "success" : "fail"));
 	if(authRes) sock->authFailCount = 0;
 	else
 	{
 		sock->authFailCount++;
-		if(sock->authFailCount > 5) { sock->socket->close(); return; }
-		else { SendInSock(sock, NetConstants::auth_failed(), true); return; }
+		//if(sock->authFailCount > 5) { sock->socket->close(); return; }
+		SendInSock(sock, NetConstants::auth_failed(), true); return;
+	}
+
+	if(0) CodeMarkers::can_be_optimized("GetSessionId возможно будет вызываться и далее, можно оптимизировать");
+	if(GetSessionId(sock) == -1)
+	{
+		auto id = clientsSessionsIds[sock] = sessionIdCounter++;
+		Log("created session id " + QSn(id) + " for client " + MyQString::AsDebug(sock));
 	}
 
 	if(readed.endsWith(';')) readed.chop(1);
@@ -206,8 +218,11 @@ void WidgetServer::SlotReadClient()
 		}
 		else
 		{
+
 			Warning("received unexpacted data from client {" + msg + "}");
-//			SendInSock(sock, NetConstants::unexpacted(), true);
+//			static int a = 0;
+//			if(a++ % 2 != 0) return;
+			SendInSock(sock, NetConstants::unexpected(), true);
 //			MyCppDifferent::sleep_ms(100);
 //			SendInSock(sock, "1fghfghfgh11", true);
 //			MyCppDifferent::sleep_ms(100);
@@ -227,6 +242,13 @@ void WidgetServer::Write(ISocket *sock, const QString &str)
 		CodeMarkers::to_do("optimisation QString(str)");
 	}
 	else { Error("WidgetServer::Write executed with sock not HttpClient"); }
+}
+
+int WidgetServer::GetSessionId(HttpClient *client)
+{
+	if(auto findRes = clientsSessionsIds.find(client); findRes != clientsSessionsIds.end())
+		return findRes->second;
+	return -1;
 }
 
 void WidgetServer::MsgsWorker(ISocket * sock, QString text)
@@ -303,6 +325,17 @@ void WidgetServer::RequestGetNote(ISocket * sock, QString idOnServer)
 	RequestInSock(sock, NetConstants::request_get_note(), std::move(idOnServer), std::move(answFoo));
 }
 
+void WidgetServer::request_get_session_id_worker(ISocket *sock, Requester::RequestData &&requestData)
+{
+	if(auto castedSock = dynamic_cast<HttpClient*>(sock))
+	{
+		auto sessionId = GetSessionId(castedSock);
+		if(sessionId == -1) { Error("request_get_session_id_worker : unexisting session!!!!"); return; }
+		AnswerForRequestSending(sock, std::move(requestData), QSn(sessionId));
+	}
+	else { Error("request_get_session_id_worker executed with sock not HttpClient"); }
+}
+
 void WidgetServer::request_try_create_group_worker(ISocket * sock, NetClient::RequestData && requestData)
 {
 	QString newGroupName = requestData.content;
@@ -310,12 +343,12 @@ void WidgetServer::request_try_create_group_worker(ISocket * sock, NetClient::Re
 	if(id < 0)
 	{
 		Log("Group "+newGroupName+" not created");
-		AnswerForRequestSending(sock, requestData, NetConstants::not_did());
+		AnswerForRequestSending(sock, std::move(requestData), NetConstants::not_did());
 	}
 	else
 	{
 		Log("Group "+newGroupName+" created");
-		AnswerForRequestSending(sock, requestData, NetConstants::MakeAnsw_try_create_group(QSn(id)));
+		AnswerForRequestSending(sock, std::move(requestData), NetConstants::MakeAnsw_try_create_group(QSn(id)));
 	}
 }
 
@@ -324,7 +357,7 @@ void WidgetServer::request_create_note_on_server_worker(ISocket * sock, NetClien
 	auto tmpNoteUptr = Note::LoadNote(requestData.content);
 	if(!tmpNoteUptr) {
 		Error("cant load note from data:\n" + requestData.content);
-		AnswerForRequestSending(sock, requestData, NetConstants::not_did());
+		AnswerForRequestSending(sock, std::move(requestData), NetConstants::not_did());
 		return;
 	}
 
@@ -332,12 +365,12 @@ void WidgetServer::request_create_note_on_server_worker(ISocket * sock, NetClien
 	if(idOnServer < 0)
 	{
 		Error("Note "+tmpNoteUptr->Name()+" not created");
-		AnswerForRequestSending(sock, requestData, NetConstants::not_did());
+		AnswerForRequestSending(sock, std::move(requestData), NetConstants::not_did());
 	}
 	else
 	{
 		Log("Note "+tmpNoteUptr->Name()+" created");
-		AnswerForRequestSending(sock, requestData, NetConstants::MakeAnsw_create_note_on_server(QSn(idOnServer)));
+		AnswerForRequestSending(sock, std::move(requestData), NetConstants::MakeAnsw_create_note_on_server(QSn(idOnServer)));
 	}
 }
 
@@ -347,13 +380,13 @@ void WidgetServer::request_move_note_to_group_worker(ISocket *sock, NetClient::R
 	if(decoded.idNoteOnServer.isEmpty() || decoded.idNewGroup.isEmpty() || decoded.dtLastUpdatedStr.isEmpty())
 	{
 		Error("GetIdNoteOnServerAndIdNewGroupFromRequest_move_note_to_group empty res");
-		AnswerForRequestSending(sock, requestData, NetConstants::not_did());
+		AnswerForRequestSending(sock, std::move(requestData), NetConstants::not_did());
 		return;
 	}
 	if(!DataBase::CheckNoteIdOnServer(decoded.idNoteOnServer))
 	{
 		Error("CheckNoteId "+decoded.idNoteOnServer+" false");
-		AnswerForRequestSending(sock, requestData, NetConstants::not_did());
+		AnswerForRequestSending(sock, std::move(requestData), NetConstants::not_did());
 		return;
 	}
 
@@ -363,12 +396,12 @@ void WidgetServer::request_move_note_to_group_worker(ISocket *sock, NetClient::R
 		if(DataBase::RemoveNoteOnServer(decoded.idNoteOnServer, true))
 		{
 			Log("note "+decoded.idNoteOnServer+" moved to default group, server removed it");
-			AnswerForRequestSending(sock, requestData, NetConstants::success());
+			AnswerForRequestSending(sock, std::move(requestData), NetConstants::success());
 		}
 		else
 		{
 			Error("note tryed "+decoded.idNoteOnServer+"move to default group, but server remove it returned false");
-			AnswerForRequestSending(sock, requestData, NetConstants::not_did());
+			AnswerForRequestSending(sock, std::move(requestData), NetConstants::not_did());
 		}
 	}
 	else // не в локальную, перемещаем
@@ -376,12 +409,12 @@ void WidgetServer::request_move_note_to_group_worker(ISocket *sock, NetClient::R
 		if(DataBase::MoveNoteToGroupOnServer(decoded.idNoteOnServer, decoded.idNewGroup, decoded.dtLastUpdatedStr))
 		{
 			Log("note "+decoded.idNoteOnServer+" moved to group "+decoded.idNewGroup);
-			AnswerForRequestSending(sock, requestData, NetConstants::success());
+			AnswerForRequestSending(sock, std::move(requestData), NetConstants::success());
 		}
 		else
 		{
 			Error("note tryed "+decoded.idNoteOnServer+"move to group "+decoded.idNewGroup+", but server can't");
-			AnswerForRequestSending(sock, requestData, NetConstants::not_did());
+			AnswerForRequestSending(sock, std::move(requestData), NetConstants::not_did());
 		}
 	}
 }
@@ -391,12 +424,12 @@ void WidgetServer::request_remove_note_worker(ISocket * sock, NetClient::Request
 	if(DataBase::RemoveNoteOnServer(requestData.content, true))
 	{
 		Log("note "+requestData.content+" removed");
-		AnswerForRequestSending(sock, requestData, NetConstants::success());
+		AnswerForRequestSending(sock, std::move(requestData), NetConstants::success());
 	}
 	else
 	{
 		Error("note tryed "+requestData.content+" to remove, but can't");
-		AnswerForRequestSending(sock, requestData, NetConstants::not_did());
+		AnswerForRequestSending(sock, std::move(requestData), NetConstants::not_did());
 	}
 }
 
@@ -409,18 +442,18 @@ void WidgetServer::request_note_saved_worker(ISocket * sock, NetClient::RequestD
 		if(DataBase::SaveNoteOnServer(note_uptr.get()))
 		{
 			Log("note "+note_uptr->Name()+" saved");
-			AnswerForRequestSending(sock, requestData, NetConstants::success());
+			AnswerForRequestSending(sock, std::move(requestData), NetConstants::success());
 		}
 		else
 		{
 			Error("note "+note_uptr->Name()+" tryed to save, but can't");
-			AnswerForRequestSending(sock, requestData, NetConstants::not_did());
+			AnswerForRequestSending(sock, std::move(requestData), NetConstants::not_did());
 		}
 	}
 	else
 	{
 		Error("can't load note from reseived data:\n" + requestData.content);
-		AnswerForRequestSending(sock, requestData, NetConstants::not_did());
+		AnswerForRequestSending(sock, std::move(requestData), NetConstants::not_did());
 	}
 }
 
@@ -431,14 +464,14 @@ void WidgetServer::request_synch_note_worker(ISocket * sock, NetClient::RequestD
 	auto datas = NetConstants::GetDataFromRequest_synch_note(requestData.content);
 	if(datas.empty()) {
 		Error("request_synch_note_worker get empty datas from content: " + requestData.content);
-		AnswerForRequestSending(sock, requestData, NetConstants::not_did());
+		AnswerForRequestSending(sock, std::move(requestData), NetConstants::not_did());
 		return;
 	}
 
 	QString answ;
 	for(uint i=0; i<datas.size(); i++) answ.append(NetConstants::request_synch_res_success()).append(',');
 	answ.chop(1);
-	AnswerForRequestSending(sock, requestData, answ);
+	AnswerForRequestSending(sock, std::move(requestData), answ);
 
 	for(auto &data:datas)
 	{
@@ -502,6 +535,7 @@ void WidgetServer::request_polly_worker(ISocket *sock, Requester::RequestData &&
 		castedSock->pollyWriter = castedSock;
 		castedSock->pollyRequestData = std::move(requestData);
 
+		// если есть что отправить - отправляем
 		if(!castedSock->waitsPollyToWrite.empty())
 		{
 			QString toWrite = std::move(castedSock->waitsPollyToWrite.front());
@@ -509,6 +543,7 @@ void WidgetServer::request_polly_worker(ISocket *sock, Requester::RequestData &&
 			Log("request_polly_worker: sending by polly: " + (toWrite == " " ? "_space_" : toWrite));
 			castedSock->Write(std::move(toWrite), true);
 		}
+		// если нет ничего на отправку - ничего не делаем, запрос будет в ожидании
 		else
 		{
 			//Log("request_polly_worker waitsPollyToWrite is empty");

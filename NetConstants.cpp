@@ -2,6 +2,9 @@
 
 #include "CodeMarkers.h"
 
+const int NetConstants::pollyMaxWaitServerMs = 25000;
+const int NetConstants::pollyMaxWaitClientMs = 30000;
+
 QString NetConstants::MakeRequest_move_note_to_group(const QString & idNoteOnServer, const QString & idNewGroup, const QDateTime & dtUpdated)
 {
 	return QString(idNoteOnServer).append(" ").append(idNewGroup).append(" ")

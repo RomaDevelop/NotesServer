@@ -120,14 +120,19 @@ void HttpClient::InitPollyCloser(HttpServer *server)
 	connect(HttpClient::pollyCloserTimer, &QTimer::timeout, [server](){
 		if(!HttpClient::pollyRequestData.id.isEmpty())
 		{
-			if(HttpClient::pollyRequestGetAt.addMSecs(HttpClient::pollyMaxWaitMs) <= QDateTime::currentDateTime())
+			if(HttpClient::pollyRequestGetAt.addMSecs(NetConstants::pollyMaxWaitServerMs) <= QDateTime::currentDateTime())
 			{
 //				server->Log(">>> write polly answ: pollyRequestGetAt: " + HttpClient::pollyRequestGetAt.toString(DateTimeFormat_ms)
 //							+ "\n\t" + HttpClient::pollyRequestGetAt.addMSecs(HttpClient::pollyMaxWaitMs).toString(DateTimeFormat_ms) + " <= "
 //							+ QDateTime::currentDateTime().toString(DateTimeFormat_ms));
 
-				if(HttpClient::pollyWriter) HttpClient::pollyWriter->Write("nothing", true);
-				else server->Error("InitPollyCloser: HttpClient::pollyWriter invalid");
+				if(HttpClient::pollyWriter)
+				{
+					QString answ = NetConstants::nothing();
+					Requester::PrepareStringToSend(answ, true);
+					HttpClient::pollyWriter->Write(std::move(answ), true);
+				}
+				else server->Error("PollyCloserWorker: HttpClient::pollyWriter invalid");
 			}
 		}
 	});
