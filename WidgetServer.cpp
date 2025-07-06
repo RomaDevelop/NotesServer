@@ -287,11 +287,13 @@ void WidgetServer::msg_all_client_notes_synch_sended_worker(ISocket * /*sock*/, 
 void WidgetServer::msg_highest_idOnServer_worker(ISocket * sock, QString && msgContent)
 {
 	auto table = DataBase::NotesWithHigherIdOnServer(msgContent);
-	Log("msg_highest_idOnServer get, count notes higher than on client: " + QSn(table.size()));
+	Log("msg_highest_idOnServer get, count notes higher than on client: " + QSn(table.size()) + "; sending updates");
 	for(auto &row:table)
 	{
 		Command_to_client_update_note(sock, Note::CreateFromRecord(row));
 	}
+
+	if(0) CodeMarkers::to_do("тут еще нужно анализировать на какие группы подписан клиент чтобы не передавать ему лишнего");
 }
 
 void WidgetServer::RequestGetNote(ISocket * sock, QString idOnServer)
@@ -475,13 +477,13 @@ void WidgetServer::request_synch_note_worker(ISocket * sock, NetClient::RequestD
 
 	for(auto &data:datas)
 	{
-		auto noteRec = DataBase::NoteByIdOnServer(data.idOnSever);
+		auto noteRec = DataBase::NoteByIdOnServer(data.idOnServer);
 		if(noteRec.isEmpty()) // заметка на сервере отсутсвует
 		{
 			/// значит она была удалена другим клиентом
 			/// отправляем клинету комунду удалить заметку
-			Log("note "+data.idOnSever+" not found on server, give client command to remove it");
-			Command_to_client_remove_note(sock, data.idOnSever);
+			Log("note "+data.idOnServer+" not found on server, give client command to remove it");
+			Command_to_client_remove_note(sock, data.idOnServer);
 		}
 		else
 		{
@@ -513,17 +515,19 @@ void WidgetServer::request_synch_note_worker(ISocket * sock, NetClient::RequestD
 			}
 		}
 	}
+}
 
-	/// Если на сервере имеются заметки которых нет у клиента -
-	///		значит они возможно были созданы другим клиентом создаем их на клиенте.
-	///
-	///		idOnServer в возрастающем порядке
-	///		значит можно сверять максимальный idOnServer,
-	///		ага, хуй там, заметка может быть в группе на которую не подписан клиент
-	///		значит нужно смотреть макс айди по группам
-	///		все равно какая-то дрочь, ведь заметки могут перемещаться по группам и изза этого хуйпойми
-	///		поговорю с чатом как такое делают
+void WidgetServer::request_get_note_worker(ISocket *sock, Requester::RequestData &&requestData)
+{
+	QString &idOnServer = requestData.content;
+	auto [check, rec] = DataBase::NoteByIdOnServerWithCheck(idOnServer);
+	if(!check) {
+		Error("request_get_note_worker not found note by id: " + requestData.content);
+		AnswerForRequestSending(sock, std::move(requestData), NetConstants::not_did());
+		return;
+	}
 
+	AnswerForRequestSending(sock, std::move(requestData), Note::InitFromRecordAndSaveToStr(rec));
 }
 
 void WidgetServer::request_polly_worker(ISocket *sock, Requester::RequestData &&requestData)

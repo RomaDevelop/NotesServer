@@ -58,15 +58,17 @@ struct NetConstants
 	// клиент отправляет всю заметку, сервер отвечает success
 
 	static const QString& request_get_note() { static QString str = "get_note"; return str; }
-	// сервер отправляет idOnServer, клиент присылает заметку или invalid
+	// один отправляет idOnServer, второй присылает заметку или invalid
 
 	static const QString& request_synch_note() { static QString str = "synch_note"; return str; }
 	// клиент отправляет idOnServer и DtUpdated от нескольких заметок, сервер отвечает success
-	declare_struct_2_fields_move(SynchData, QString, idOnSever, QString, dtUpdatedStr);
+	declare_struct_2_fields_move(SynchData, QString, idOnServer, QString, dtUpdatedStr);
 	static QString MakeRequest_synch_note(std::vector<SynchData> datas);
 	static std::vector<SynchData> GetDataFromRequest_synch_note(const QString &text);
 	static QString request_synch_res_success() { static QString str = "1"; return str; }
 	static QString request_synch_res_error() { static QString str = "0"; return str; }
+
+	//static const QString& request_get_new_notes() { static QString str = "get_new_notes"; return str; }
 
 	static const QString& request_polly() { static QString str = "polly"; return str; }
 
@@ -80,6 +82,8 @@ struct NetConstants
 					std::cref(request_note_saved()),
 					std::cref(request_get_note()),
 					std::cref(request_synch_note()),
+					//std::cref(request_get_new_notes()),
+
 					std::cref(request_polly()),
 		};
 		return setSinglton;

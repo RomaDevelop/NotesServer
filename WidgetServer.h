@@ -73,6 +73,9 @@ private:
 	void request_remove_note_worker(ISocket *sock, NetClient::RequestData && requestData);
 	void request_note_saved_worker(ISocket *sock, NetClient::RequestData && requestData);
 	void request_synch_note_worker(ISocket *sock, NetClient::RequestData && requestData);
+	//void request_get_new_notes_worker(ISocket *sock, NetClient::RequestData && requestData) {}
+	void request_get_note_worker(ISocket *sock, NetClient::RequestData && requestData);
+
 	void request_polly_worker(ISocket *sock, NetClient::RequestData && requestData);
 
 	std::map<QStringRefWr_const, std::function<void(ISocket *sock, NetClient::RequestData &&requestData)>> requestWorkersMap {
@@ -83,6 +86,9 @@ private:
 		{ std::cref(NetConstants::request_remove_note()), [this](ISocket *sock, NetClient::RequestData &&requestData){ request_remove_note_worker(sock, std::move(requestData)); } },
 		{ std::cref(NetConstants::request_note_saved()), [this](ISocket *sock, NetClient::RequestData &&requestData){ request_note_saved_worker(sock, std::move(requestData)); } },
 		{ std::cref(NetConstants::request_synch_note()), [this](ISocket *sock, NetClient::RequestData &&requestData){ request_synch_note_worker(sock, std::move(requestData)); } },
+		//{ std::cref(NetConstants::request_get_new_notes()), [this](ISocket *sock, NetClient::RequestData &&requestData){ request_get_new_notes_worker(sock, std::move(requestData)); } },
+		{ std::cref(NetConstants::request_get_note()), [this](ISocket *sock, NetClient::RequestData &&requestData){ request_get_note_worker(sock, std::move(requestData)); } },
+
 		{ std::cref(NetConstants::request_polly()), [this](ISocket *sock, NetClient::RequestData &&requestData){ request_polly_worker(sock, std::move(requestData)); } },
 
 	};
