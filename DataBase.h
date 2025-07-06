@@ -40,6 +40,7 @@ public:
 
 	static QStringList NoteByIdOnClient(const QString &id);
 	static QStringList NoteByIdOnServer(const QString &idOnServer);
+	static std::pair<bool, QStringList> NoteByIdOnServerWithCheck(const QString &idOnServer);
 	static bool CheckNoteIdOnClient(const QString &id);
 	static bool CheckNoteIdOnServer(const QString &idOnServer);
 	static std::vector<Note> NotesFromBD();
@@ -52,7 +53,9 @@ public:
 	static bool RemoveNoteOnServer(const QString &idOnServer, bool chekId);
 
 	static QString HighestIdOnServer();
-	static std::vector<QStringList> NotesWithHigherIdOnServer(QString idOnServer);
+	static std::vector<QStringList> NotesWithHigherIdOnServer(const QString &idOnServer);
+	///\brief return [idOnServer, idGroup]
+	//static QStringPairVector NotesWithHigherIdOnServer(const QString &idOnServer);
 };
 
 

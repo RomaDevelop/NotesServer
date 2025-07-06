@@ -315,6 +315,12 @@ QStringList DataBase::NoteByIdOnServer(const QString & idOnServer)
 	return DoSqlQueryGetFirstRec("select * from "+Fields::Notes()+" where "+Fields::idNoteOnServer()+" = " + idOnServer);
 }
 
+std::pair<bool, QStringList> DataBase::NoteByIdOnServerWithCheck(const QString &idOnServer)
+{
+	if(CheckNoteIdOnServer(idOnServer)) return {true, NoteByIdOnServer(idOnServer)};
+	else return {false, {}};
+}
+
 bool DataBase::CheckNoteIdOnClient(const QString &id)
 {
 	return DoSqlQueryGetFirstCell("select count("+Fields::idNote()+") from "+Fields::Notes()
@@ -341,6 +347,8 @@ std::vector<Note> DataBase::NotesFromBD()
 	}
 	return notes;
 }
+
+
 
 bool DataBase::SetNoteFieldIdOnServer_OnClient(const QString & idNote, const QString & idOnServer)
 {
@@ -467,10 +475,16 @@ QString DataBase::HighestIdOnServer()
 	return DoSqlQueryGetFirstCell("select max("+Fields::idNoteOnServer()+") from "+Fields::Notes());
 }
 
-std::vector<QStringList> DataBase::NotesWithHigherIdOnServer(QString idOnServer)
+std::vector<QStringList> DataBase::NotesWithHigherIdOnServer(const QString &idOnServer)
 {
 	return DoSqlQueryGetTable("select * from "+Fields::Notes()+" where "+Fields::idNoteOnServer()+" > " + idOnServer);
 }
+
+//QStringPairVector DataBase::NotesWithHigherIdOnServer(const QString &idOnServer)
+//{
+//	return DoSqlQueryGetFirstTwoFields("select "+Fields::idNoteOnServer()+", "+Fields::idGroup()
+//									   +" from notes where "+Fields::idNoteOnServer()+" > " + idOnServer);
+//}
 
 
 
