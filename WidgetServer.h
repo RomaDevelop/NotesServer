@@ -17,6 +17,14 @@ struct ClientData
 	QString msg;
 };
 
+struct SessionData
+{
+	qint64 id;
+	SessionData(qint64 id_): id{id_} {}
+
+	std::set<HttpClient*> activeSockets;
+};
+
 class WidgetServer : public QWidget, public Requester
 {
 	Q_OBJECT
@@ -49,8 +57,9 @@ private:
 	std::map<HttpClient*, ClientData> clientsDatas;
 
 	qint64 sessionIdCounter = 1;
-	std::map<HttpClient*, qint64> clientsSessionsIds;
-	int GetSessionId(HttpClient *client);
+	std::set<std::unique_ptr<SessionData>> sessionsDatas;
+	std::map<HttpClient*, SessionData*> mapClientSession;
+	std::map<qint64, SessionData*> mapIdSession;
 
 	void MsgsWorker(ISocket *sock, QString text);
 

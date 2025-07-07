@@ -34,6 +34,7 @@ struct HttpCommon
 };
 
 class HttpServer;
+struct SessionData;
 
 class HttpClient : public QObject, public ISocket
 {
@@ -53,6 +54,8 @@ public:
 	QString ReadBody() { return QString::fromStdString(request.body()); }
 
 	uint8_t authFailCount;
+
+	SessionData *sessionPtr = nullptr;
 
 private:
 	volatile bool hasPreparedDataToWrite = false;
@@ -127,6 +130,7 @@ private:
 	std::atomic<bool> running{false};
 	std::atomic<bool> stopFlag{false};
 	std::set<boost::asio::ip::tcp::socket *> activeSockets;
+	qint64 activeSocketsCount = 0;
 	std::mutex mtxActiveSockets;
 	std::unique_ptr<net::io_context> ioc;
 	std::unique_ptr<tcp::acceptor> acceptor;

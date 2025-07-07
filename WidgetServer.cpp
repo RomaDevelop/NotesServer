@@ -30,8 +30,10 @@ WidgetServer::WidgetServer(QWidget *parent)
 	QVBoxLayout *vlo_main = new QVBoxLayout(this);
 	QHBoxLayout *hlo1 = new QHBoxLayout;
 	QHBoxLayout *hlo2 = new QHBoxLayout;
+	QHBoxLayout *hlo3 = new QHBoxLayout;
 	vlo_main->addLayout(hlo1);
 	vlo_main->addLayout(hlo2);
+	vlo_main->addLayout(hlo3);
 
 	QPushButton *btn1 = new QPushButton("clear");
 	hlo1->addWidget(btn1);
@@ -69,9 +71,36 @@ WidgetServer::WidgetServer(QWidget *parent)
 
 	hlo1->addStretch();
 
+	hlo2->addWidget(new QLabel("session:"));
+	auto leSesssion = new QLineEdit;
+	hlo2->addWidget(leSesssion);
+	hlo2->addWidget(new QLabel("message:"));
+	auto leMessage = new QLineEdit;
+	hlo2->addWidget(leMessage);
+	QPushButton *btnWrite = new QPushButton(" Write ");
+	hlo2->addWidget(btnWrite);
+	connect(btnWrite, &QPushButton::clicked, [this, leSesssion, leMessage](){
+		if(!mapIdSession.count(leSesssion->text().toUInt()))
+		{
+			Error("session not found");
+			return;
+		}
+		auto session = mapIdSession[leSesssion->text().toUInt()];
+		if(!session->activeSockets.size())
+		{
+			Error("session has no active sockets");
+			return;
+		}
+
+		HttpClient *cl = *session->activeSockets.begin();
+		SendInSock(cl, leMessage->text().isEmpty() ? "empty text" : leMessage->text(), true);
+	});
+
+	hlo2->addStretch();
+
 	textEdit = new QTextEdit;
 	textEdit->setTabStopDistance(40);
-	hlo2->addWidget(textEdit);
+	hlo3->addWidget(textEdit);
 
 	new TextEditCleaner(textEdit, 10000, textEdit);
 
@@ -181,14 +210,53 @@ void WidgetServer::SlotReadClient()
 	{
 		sock->authFailCount++;
 		//if(sock->authFailCount > 5) { sock->socket->close(); return; }
-		SendInSock(sock, NetConstants::auth_failed(), true); return;
+		SendInSock(sock, NetConstants::auth_failed(), true);
+		return;
 	}
 
-	if(0) CodeMarkers::can_be_optimized("GetSessionId возможно будет вызываться и далее, можно оптимизировать");
-	if(GetSessionId(sock) == -1)
+	Warning("session id in target " + targetContent.sessionId);
+	if(targetContent.sessionId == NetClient::undefinedSessionIdStr())
 	{
-		auto id = clientsSessionsIds[sock] = sessionIdCounter++;
+		if(0) CodeMarkers::to_do("нужно проверять имеет ли право клиент получить сессию");
+
+		qint64 id = sessionIdCounter++;
+		auto sessionPtr = sessionsDatas.emplace(new SessionData(id)).first->get();
+		sessionPtr->activeSockets.insert(sock);
+		mapClientSession[sock] = sessionPtr;
+		mapIdSession[id] = sessionPtr;
+		sock->sessionPtr = sessionPtr;
 		Log("created session id " + QSn(id) + " for client " + MyQString::AsDebug(sock));
+	}
+	else
+	{
+		qint64 id = targetContent.sessionId.toLongLong();
+		if(sock->sessionPtr) Log("client " + MyQString::AsDebug(sock) + " using existing session id " + QSn(id));
+		else
+		{
+			if(auto it = mapIdSession.find(id); it != mapIdSession.end())
+			{
+				if(0) CodeMarkers::to_do("нужно проверять имеет ли право клиент стать частью этой сессии");
+
+				auto sessionPtr = it->second;
+				sessionPtr->activeSockets.insert(sock);
+				sock->sessionPtr = sessionPtr;
+				mapClientSession[sock] = sessionPtr;
+				Log("new client " + MyQString::AsDebug(sock) + " using existing session id " + QSn(id));
+
+				connect(sock, &QObject::destroyed, this, [sock, sessionPtr](){
+					//mapClientSession.erase(sock); - не нужно удалять, чтобы можно было по умершему клиенту найти живую сессию
+					sessionPtr->activeSockets.erase(sock);
+				});
+			}
+			else
+			{
+				Error("impossible! session not found for session id!!!");
+				SendInSock(sock, NetConstants::msg_error(), true);
+			}
+		}
+
+		if(0) CodeMarkers::to_do("нужно удалять не актуальные sock из мапы");
+		if(0) CodeMarkers::can_be_optimized("можно убрать предобразование строки в число");
 	}
 
 	if(readed.endsWith(';')) readed.chop(1);
@@ -237,18 +305,23 @@ void WidgetServer::Write(ISocket *sock, const QString &str)
 {
 	if(auto castedSock = dynamic_cast<HttpClient*>(sock))
 	{
-		castedSock->Write(QString(str));
-		return;
-		CodeMarkers::to_do("optimisation QString(str)");
+		if(auto sessionPtr = castedSock->sessionPtr; sessionPtr)
+		{
+			if(sessionPtr->activeSockets.count(castedSock))
+				castedSock->Write(QString(str));
+			else if(!sessionPtr->activeSockets.empty())
+				(*sessionPtr->activeSockets.begin())->Write(QString(str));
+			else Warning("Write in dead session; id session = " + QSn(sessionPtr->id));
+		}
+		else
+		{
+			Error("request_get_session_id_worker : !castedSock->sessionPtr");
+			castedSock->Write(QString(NetConstants::msg_error()));
+		}
+
+		if(0) CodeMarkers::to_do("optimisation QString(str)");
 	}
 	else { Error("WidgetServer::Write executed with sock not HttpClient"); }
-}
-
-int WidgetServer::GetSessionId(HttpClient *client)
-{
-	if(auto findRes = clientsSessionsIds.find(client); findRes != clientsSessionsIds.end())
-		return findRes->second;
-	return -1;
 }
 
 void WidgetServer::MsgsWorker(ISocket * sock, QString text)
@@ -331,9 +404,20 @@ void WidgetServer::request_get_session_id_worker(ISocket *sock, Requester::Reque
 {
 	if(auto castedSock = dynamic_cast<HttpClient*>(sock))
 	{
-		auto sessionId = GetSessionId(castedSock);
-		if(sessionId == -1) { Error("request_get_session_id_worker : unexisting session!!!!"); return; }
-		AnswerForRequestSending(sock, std::move(requestData), QSn(sessionId));
+		if(!castedSock->sessionPtr)
+		{
+			Error("request_get_session_id_worker : !castedSock->sessionPtr");
+			AnswerForRequestSending(sock, std::move(requestData), NetConstants::msg_error());
+		}
+		else if(!NetClient::IsSessionIdValid(castedSock->sessionPtr->id))
+		{
+			Error("request_get_session_id_worker : invalid session");
+			AnswerForRequestSending(sock, std::move(requestData), NetConstants::msg_error());
+		}
+		else
+		{
+			AnswerForRequestSending(sock, std::move(requestData), QSn(castedSock->sessionPtr->id));
+		}
 	}
 	else { Error("request_get_session_id_worker executed with sock not HttpClient"); }
 }

@@ -4,8 +4,8 @@
 
 #include <QCoreApplication>
 
-#include <MyCppDifferent.h>
-
+#include "MyCppDifferent.h"
+#include "MyQString.h"
 
 HttpServer::HttpServer(QObject *parent) : QObject(parent)
 {
@@ -26,6 +26,8 @@ void HttpServer::stop() {
 
 	mtxActiveSockets.lock();
 	for(auto &sock:activeSockets) sock->close();
+	activeSockets.clear();
+	activeSocketsCount = 0;
 	mtxActiveSockets.unlock();
 
 	if(acceptor) acceptor->close();
@@ -59,20 +61,24 @@ void HttpServer::run(unsigned short port) {
 }
 
 void HttpServer::handle_session(tcp::socket socket) {
-	Log("HttpServer::handle_session");
-
 	mtxActiveSockets.lock();
 	activeSockets.insert(&socket);
+	activeSocketsCount++;
 	mtxActiveSockets.unlock();
 
 	try {
 		HttpClientGuard clientGuard;
+		if(0) CodeMarkers::to_do("нужно как-то сделать так, чтобы HttpClient не умирал, а еще какое-то время жил"
+								 "а то можно где-то как-то всраться с использованием метвого объекта"
+								 "но тогда нужно в нем сделать соответсвующую пометку, что он своё отработал, а его дергают");
 		QMetaObject::invokeMethod(this, [this, &clientGuard, &socket](){
 			clientGuard.client = new HttpClient(&socket);
 			emit SignalNewConnection(clientGuard.client);
 		}, Qt::BlockingQueuedConnection);
 
 		HttpClient *client = clientGuard.client;
+		Log("HttpServer::handle_session HttpClient created: " + MyQString::AsDebug(client) + "; activeSocketsCount: " + QSn(activeSocketsCount));
+
 		while (true){
 			beast::flat_buffer buffer;
 			http::request<http::string_body> request;
@@ -100,6 +106,7 @@ void HttpServer::handle_session(tcp::socket socket) {
 
 	mtxActiveSockets.lock();
 	activeSockets.erase(&socket);
+	activeSocketsCount--;
 	mtxActiveSockets.unlock();
 
 	Log("HttpServer::handle_session end");
