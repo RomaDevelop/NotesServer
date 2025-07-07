@@ -116,8 +116,7 @@ HttpClient::~HttpClient()
 {
 	if(pollyWriter == this)
 	{
-		pollyRequestData.id.clear();
-		pollyWriter = {};
+		ClearPolly();
 	}
 }
 
@@ -139,7 +138,11 @@ void HttpClient::InitPollyCloser(HttpServer *server)
 					Requester::PrepareStringToSend(answ, true);
 					HttpClient::pollyWriter->Write(std::move(answ), true);
 				}
-				else server->Error("PollyCloserWorker: HttpClient::pollyWriter invalid");
+				else
+				{
+					server->Error("PollyCloserWorker: HttpClient::pollyWriter invalid (pollyRequestData.id = "
+									+HttpClient::pollyRequestData.id+")");
+				}
 			}
 		}
 	});
@@ -159,7 +162,7 @@ void HttpClient::Write(QString &&text, bool forcePolly)
 		// если не завершилась - выдаем ошибку
 	}
 
-	if(canSendNow && !forcePolly)
+	if(canSendNow && !forcePolly && this != pollyWriter)
 	{
 		Log("HttpClient::Write: regular answering now: " + text);
 		bodyToWrite = std::move(text);
@@ -174,10 +177,9 @@ void HttpClient::Write(QString &&text, bool forcePolly)
 
 			pollyWriter->bodyToWrite.clear();
 			pollyWriter->bodyToWrite.append(NetConstants::request_answ()).append(pollyRequestData.id).append(" ").append(text);
-
-			pollyRequestData.id.clear();
-
 			pollyWriter->hasPreparedDataToWrite = true;
+
+			ClearPolly();
 		}
 		else
 		{
@@ -209,5 +211,5 @@ void HttpClient::Write_in_HttpServerHandler()
 	hasPreparedDataToWrite = false;
 	canSendNow = false;
 
-	if(pollyWriter && pollyWriter->socket == socket) pollyWriter = {};
+	if(pollyWriter && pollyWriter->socket == socket) ClearPolly();
 }

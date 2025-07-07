@@ -177,7 +177,7 @@ void WidgetServer::SlotNewConnection(HttpClient *sock)
 {
 	connect(sock, &HttpClient::SignalDisconnected, [this, sock]()
 	{
-		Log("disconnected: "/* + MyQString::AsDebug(sock)*/);
+		Log("disconnected: " + MyQString::AsDebug(sock));
 		clientsDatas.erase(sock);
 	});
 	connect(sock, &HttpClient::SignalReadyRead, this, &WidgetServer::SlotReadClient);
@@ -215,6 +215,7 @@ void WidgetServer::SlotReadClient()
 	}
 
 	Warning("session id in target " + targetContent.sessionId);
+	bool newClient = false;
 	if(targetContent.sessionId == NetClient::undefinedSessionIdStr())
 	{
 		if(0) CodeMarkers::to_do("нужно проверять имеет ли право клиент получить сессию");
@@ -225,12 +226,13 @@ void WidgetServer::SlotReadClient()
 		mapClientSession[sock] = sessionPtr;
 		mapIdSession[id] = sessionPtr;
 		sock->sessionPtr = sessionPtr;
-		Log("created session id " + QSn(id) + " for client " + MyQString::AsDebug(sock));
+		newClient = true;
+		Log("created session id " + QSn(id) + " for new client " + MyQString::AsDebug(sock));
 	}
 	else
 	{
 		qint64 id = targetContent.sessionId.toLongLong();
-		if(sock->sessionPtr) Log("client " + MyQString::AsDebug(sock) + " using existing session id " + QSn(id));
+		if(sock->sessionPtr) Log("existing client " + MyQString::AsDebug(sock) + " using existing session id " + QSn(id));
 		else
 		{
 			if(auto it = mapIdSession.find(id); it != mapIdSession.end())
@@ -241,23 +243,27 @@ void WidgetServer::SlotReadClient()
 				sessionPtr->activeSockets.insert(sock);
 				sock->sessionPtr = sessionPtr;
 				mapClientSession[sock] = sessionPtr;
+				newClient = true;
 				Log("new client " + MyQString::AsDebug(sock) + " using existing session id " + QSn(id));
-
-				connect(sock, &QObject::destroyed, this, [sock, sessionPtr](){
-					//mapClientSession.erase(sock); - не нужно удалять, чтобы можно было по умершему клиенту найти живую сессию
-					sessionPtr->activeSockets.erase(sock);
-				});
 			}
 			else
 			{
 				Error("impossible! session not found for session id!!!");
 				SendInSock(sock, NetConstants::msg_error(), true);
+				return;
 			}
 		}
 
 		if(0) CodeMarkers::to_do("нужно удалять не актуальные sock из мапы");
 		if(0) CodeMarkers::can_be_optimized("можно убрать предобразование строки в число");
 	}
+
+	if(newClient)
+		connect(sock, &HttpClient::SignalDisconnected, this, [this, sock](){
+			//mapClientSession.erase(sock); - не нужно удалять, чтобы можно было по умершему клиенту найти живую сессию
+			if(!sock->sessionPtr) { Error("HttpClient::SignalDisconnected null sock->sessionPtr"); return; }
+			sock->sessionPtr->activeSockets.erase(sock);
+		});
 
 	if(readed.endsWith(';')) readed.chop(1);
 	else
@@ -303,25 +309,21 @@ void WidgetServer::SlotReadClient()
 
 void WidgetServer::Write(ISocket *sock, const QString &str)
 {
-	if(auto castedSock = dynamic_cast<HttpClient*>(sock))
+	auto castedSock = static_cast<HttpClient*>(sock);
+	if(auto it = mapClientSession.find(castedSock); it != mapClientSession.end())
 	{
-		if(auto sessionPtr = castedSock->sessionPtr; sessionPtr)
-		{
-			if(sessionPtr->activeSockets.count(castedSock))
-				castedSock->Write(QString(str));
-			else if(!sessionPtr->activeSockets.empty())
-				(*sessionPtr->activeSockets.begin())->Write(QString(str));
-			else Warning("Write in dead session; id session = " + QSn(sessionPtr->id));
-		}
-		else
-		{
-			Error("request_get_session_id_worker : !castedSock->sessionPtr");
-			castedSock->Write(QString(NetConstants::msg_error()));
-		}
-
-		if(0) CodeMarkers::to_do("optimisation QString(str)");
+		SessionData *sessionPtr = it->second;
+		if(sessionPtr->activeSockets.count(castedSock))
+			castedSock->Write(QString(str));
+		else if(!sessionPtr->activeSockets.empty())
+			(*sessionPtr->activeSockets.begin())->Write(QString(str));
+		else Warning("Write in dead session; id session = " + QSn(sessionPtr->id));
 	}
-	else { Error("WidgetServer::Write executed with sock not HttpClient"); }
+	else Error("WidgetServer::Write executed with sock not found in mapClientSession");
+
+#error можно добавить мап сокетов без сессий и тут проверять еще что сокет в этой мапе и писать ему об этом
+
+	if(0) CodeMarkers::to_do("optimisation QString(str)");
 }
 
 void WidgetServer::MsgsWorker(ISocket * sock, QString text)

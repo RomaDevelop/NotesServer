@@ -76,6 +76,7 @@ public:
 
 	inline static Requester::RequestData pollyRequestData;
 	inline static HttpClient *pollyWriter {};
+	inline static void ClearPolly() { pollyWriter = {}; pollyRequestData.id.clear(); }
 	inline static QDateTime pollyRequestGetAt;
 	inline static QTimer *pollyCloserTimer {};
 	inline static void InitPollyCloser(HttpServer *server);
