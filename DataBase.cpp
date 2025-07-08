@@ -256,7 +256,7 @@ qint64 DataBase::InsertNoteInClientDB(Note *note)
 					 {":updated", note->DtLastUpdatedStr()},
 					});
 
-	note->id = -1;
+	note->id = BadInsertNoteResult();
 
 	if(res.errors.isEmpty())
 	{
@@ -265,7 +265,7 @@ qint64 DataBase::InsertNoteInClientDB(Note *note)
 		note->id = id.toUInt(&ok);
 		if(!ok)
 		{
-			note->id = -1;
+			note->id = BadInsertNoteResult();
 			QMbError("bad id " + id);
 		}
 
@@ -288,6 +288,8 @@ qint64 DataBase::InsertNoteInServerDB(Note * note)
 					  {":dtNotif", note->DTNotify().toString(Fields::dtFormat())}, {":dtPosp", note->DTPostpone().toString(Fields::dtFormat())},
 					  {":content", note->Content()}, {":dtUpdated", note->DtLastUpdatedStr()}});
 
+	note->idOnServer = BadInsertNoteResult();
+
 	if(res.errors.isEmpty())
 	{
 		auto idOnServer = DoSqlQueryGetFirstCell("select max("+Fields::idNoteOnServer()+") from " + Fields::Notes());
@@ -295,7 +297,7 @@ qint64 DataBase::InsertNoteInServerDB(Note * note)
 		note->idOnServer = idOnServer.toUInt(&ok);
 		if(!ok)
 		{
-			note->idOnServer = -1;
+			note->idOnServer = BadInsertNoteResult();
 			Error("bad idOnServer " + idOnServer);
 		}
 

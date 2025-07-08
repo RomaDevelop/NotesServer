@@ -37,6 +37,7 @@ public:
 
 	static qint64 InsertNoteInClientDB(Note *note);
 	static qint64 InsertNoteInServerDB(Note *note);
+	static qint64 BadInsertNoteResult() { return -1; }
 
 	static QStringList NoteByIdOnClient(const QString &id);
 	static QStringList NoteByIdOnServer(const QString &idOnServer);
