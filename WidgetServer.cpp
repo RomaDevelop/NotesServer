@@ -80,12 +80,12 @@ WidgetServer::WidgetServer(QWidget *parent)
 	QPushButton *btnWrite = new QPushButton(" Write ");
 	hlo2->addWidget(btnWrite);
 	connect(btnWrite, &QPushButton::clicked, [this, leSesssion, leMessage](){
-		if(!mapIdSession.count(leSesssion->text().toUInt()))
+		if(!SessionData::mapIdAndSession.count(leSesssion->text().toUInt()))
 		{
 			Error("session not found");
 			return;
 		}
-		auto session = mapIdSession[leSesssion->text().toUInt()];
+		auto session = SessionData::mapIdAndSession[leSesssion->text().toUInt()];
 		if(!session->activeSockets.size())
 		{
 			Error("session has no active sockets");
@@ -178,10 +178,8 @@ void WidgetServer::SlotNewConnection(HttpClient *sock)
 	connect(sock, &HttpClient::SignalDisconnected, [this, sock]()
 	{
 		Log("disconnected: " + MyQString::AsDebug(sock));
-		clientsDatas.erase(sock);
 	});
 	connect(sock, &HttpClient::SignalReadyRead, this, &WidgetServer::SlotReadClient);
-	clientsDatas[sock] = {};
 
 	sock->logFoo = [this](const QString &str){ QMetaObject::invokeMethod(textEdit, [this, str]() { Log(str); }); };
 	sock->errorFoo = [this](const QString &str){ QMetaObject::invokeMethod(textEdit, [this, str]() { Error(str); }); };
@@ -193,15 +191,30 @@ void WidgetServer::SlotReadClient()
 {
 	HttpClient *sock = (HttpClient*)sender();
 
+	if(!sock->addedInSocksWitoutSession) {
+		socketsWithotSession.insert(sock);
+		sock->addedInSocksWitoutSession = true;
+		connect(sock, &HttpClient::SignalDisconnected, this, [this, sock](){
+			if(!sock->removedFromSocksWitoutSession)
+				socketsWithotSession.erase(sock);
+		});
+	}
+
 	//Log("SlotReadClient");
 	//Log("received:\n" + HttpCommon::GetFullText(sock->request));
 	//Log("received target: " + sock->ReadTarget());
-	//Log("received body: " + sock->ReadBody());
+	//Log("received body: " + sock->ReadBody());`
 
 	QString target = sock->ReadTarget();
-	QString readed = sock->ReadBody();
+	QString body = sock->ReadBody();
 
 	auto targetContent = NetClient::DecodeTarget(target);
+	if(!NetClient::CheckTargetContent(targetContent))
+	{
+		Warning("get bad target " + target);
+		SendInSock(sock, NetConstants::msg_error() + "bad target", true);
+		return;
+	}
 
 	bool authRes = NetClient::ChekAuth(targetContent);
 	Log(QString("auth res: ").append(authRes ? "success" : "fail"));
@@ -214,43 +227,61 @@ void WidgetServer::SlotReadClient()
 		return;
 	}
 
-	Warning("session id in target " + targetContent.sessionId);
-	bool newClient = false;
+	// клиент прислал undefinedSessionIdStr
 	if(targetContent.sessionId == NetClient::undefinedSessionIdStr())
 	{
 		if(0) CodeMarkers::to_do("нужно проверять имеет ли право клиент получить сессию");
 
-		qint64 id = sessionIdCounter++;
-		auto sessionPtr = sessionsDatas.emplace(new SessionData(id)).first->get();
-		sessionPtr->activeSockets.insert(sock);
-		mapClientSession[sock] = sessionPtr;
-		mapIdSession[id] = sessionPtr;
-		sock->sessionPtr = sessionPtr;
-		newClient = true;
-		Log("created session id " + QSn(id) + " for new client " + MyQString::AsDebug(sock));
+		if(sock->sessionPtr) // если это известный клиент
+		{
+			Command_to_client_your_session_id(sock);
+			if(0) CodeMarkers::to_do("а какого хера он это присылает???");
+			Warning("for existing client " + MyQString::AsDebug(sock) + " send your_session_id " + QSn(sock->sessionPtr->id));
+		}
+		else // если это новый клиент
+		{
+			BindSocketToSession(sock, nullptr, true);
+			Log("for new client " + MyQString::AsDebug(sock) + " created session " + QSn(sock->sessionPtr->id));
+		}
 	}
+	// клиент прислал конкретный sessionId
 	else
 	{
-		qint64 id = targetContent.sessionId.toLongLong();
-		if(sock->sessionPtr) Log("existing client " + MyQString::AsDebug(sock) + " using existing session id " + QSn(id));
+		// этот сокет уже известен серверу
+		if(sock->sessionPtr)
+		{
+			if(sock->sessionPtr->CmpWithTarget(targetContent))
+				Log("existing client " + MyQString::AsDebug(sock) + " using existing session id " + targetContent.sessionId);
+			else {
+				Error("existing client " + MyQString::AsDebug(sock) + " not passed session check ("
+					  + QSn(sock->sessionPtr->id)+" != "+targetContent.sessionId
+					  + " or " + sock->sessionPtr->dt+" ? "+targetContent.sessionDt + ")");
+				SendInSock(sock, NetConstants::msg_error(), true);
+				return;
+			}
+		}
+		// это неизвестный для сервера сокет
 		else
 		{
-			if(auto it = mapIdSession.find(id); it != mapIdSession.end())
+			auto idFromTarget = targetContent.sessionId.toLongLong();
+			SessionData *sessionPtr = nullptr;
+			if(auto it = SessionData::mapIdAndSession.find(idFromTarget); it != SessionData::mapIdAndSession.end())
+				sessionPtr = it->second;
+
+			// sessionId от клиента известен и параметры сессии совпадают
+			if(sessionPtr && sessionPtr->CmpWithTarget(targetContent))
 			{
+				// присоединение сокета к существующей сессии
 				if(0) CodeMarkers::to_do("нужно проверять имеет ли право клиент стать частью этой сессии");
 
-				auto sessionPtr = it->second;
-				sessionPtr->activeSockets.insert(sock);
-				sock->sessionPtr = sessionPtr;
-				mapClientSession[sock] = sessionPtr;
-				newClient = true;
-				Log("new client " + MyQString::AsDebug(sock) + " using existing session id " + QSn(id));
+				BindSocketToSession(sock, sessionPtr, false);
+				Log("new client " + MyQString::AsDebug(sock) + " using existing session id " + QSn(idFromTarget));
 			}
 			else
 			{
-				Error("impossible! session not found for session id!!!");
-				SendInSock(sock, NetConstants::msg_error(), true);
-				return;
+				BindSocketToSession(sock, nullptr, true);
+				Log("new client " + MyQString::AsDebug(sock) + " not passed session check for existing session id "
+					  + QSn(idFromTarget) + "; created new session " + QSn(sock->sessionPtr->id));
 			}
 		}
 
@@ -258,20 +289,13 @@ void WidgetServer::SlotReadClient()
 		if(0) CodeMarkers::can_be_optimized("можно убрать предобразование строки в число");
 	}
 
-	if(newClient)
-		connect(sock, &HttpClient::SignalDisconnected, this, [this, sock](){
-			//mapClientSession.erase(sock); - не нужно удалять, чтобы можно было по умершему клиенту найти живую сессию
-			if(!sock->sessionPtr) { Error("HttpClient::SignalDisconnected null sock->sessionPtr"); return; }
-			sock->sessionPtr->activeSockets.erase(sock);
-		});
-
-	if(readed.endsWith(';')) readed.chop(1);
+	if(body.endsWith(';')) body.chop(1);
 	else
 	{
-		Error("get unfinished data ["+readed+"]");
+		Error("get unfinished data ["+body+"]");
 		return;
 	}
-	auto msgs = readed.split(';');
+	auto msgs = body.split(';');
 
 	for(auto &msg:msgs)
 	{
@@ -319,11 +343,47 @@ void WidgetServer::Write(ISocket *sock, const QString &str)
 			(*sessionPtr->activeSockets.begin())->Write(QString(str));
 		else Warning("Write in dead session; id session = " + QSn(sessionPtr->id));
 	}
+	else if(socketsWithotSession.count(castedSock) != 0)
+	{
+		castedSock->Write(QString(str));
+	}
 	else Error("WidgetServer::Write executed with sock not found in mapClientSession");
 
-#error можно добавить мап сокетов без сессий и тут проверять еще что сокет в этой мапе и писать ему об этом
-
 	if(0) CodeMarkers::to_do("optimisation QString(str)");
+}
+
+void WidgetServer::BindSocketToSession(HttpClient *sock, SessionData *session, bool sendYourSessionId)
+{
+	if(!session)
+	{
+		session = SessionData::MakeNewSession();
+		sendYourSessionId = true;
+	}
+
+	if(!sock->removedFromSocksWitoutSession)
+	{
+		socketsWithotSession.erase(sock);
+		sock->removedFromSocksWitoutSession = true;
+	}
+
+	session->activeSockets.insert(sock);
+	mapClientSession[sock] = session;
+	sock->sessionPtr = session;
+
+	if(!sock->connectDid_ErasingActiveSock)
+	{
+		connect(sock, &HttpClient::SignalDisconnected, this, [this, sock](){
+			//mapClientSession.erase(sock); - не нужно удалять, чтобы можно было по умершему клиенту найти живую сессию
+			if(!sock->sessionPtr) { Error("HttpClient::SignalDisconnected null sock->sessionPtr"); return; }
+			sock->sessionPtr->activeSockets.erase(sock);
+		});
+		sock->connectDid_ErasingActiveSock = true;
+	}
+
+	if(sendYourSessionId)
+	{
+		Command_to_client_your_session_id(sock);
+	}
 }
 
 void WidgetServer::MsgsWorker(ISocket * sock, QString text)
@@ -402,7 +462,7 @@ void WidgetServer::RequestGetNote(ISocket * sock, QString idOnServer)
 	RequestInSock(sock, NetConstants::request_get_note(), std::move(idOnServer), std::move(answFoo));
 }
 
-void WidgetServer::request_get_session_id_worker(ISocket *sock, Requester::RequestData &&requestData)
+void WidgetServer::request_get_session_worker(ISocket *sock, Requester::RequestData &&requestData)
 {
 	if(auto castedSock = dynamic_cast<HttpClient*>(sock))
 	{
@@ -418,7 +478,8 @@ void WidgetServer::request_get_session_id_worker(ISocket *sock, Requester::Reque
 		}
 		else
 		{
-			AnswerForRequestSending(sock, std::move(requestData), QSn(castedSock->sessionPtr->id));
+			AnswerForRequestSending(sock, std::move(requestData),
+				NetConstants::MakeAnsw_request_get_session(QSn(castedSock->sessionPtr->id), castedSock->sessionPtr->dt));
 		}
 	}
 	else { Error("request_get_session_id_worker executed with sock not HttpClient"); }
@@ -640,6 +701,16 @@ void WidgetServer::request_polly_worker(ISocket *sock, Requester::RequestData &&
 		}
 	}
 	else { Error("WidgetServer::request_polly_worker executed with sock not HttpClient"); }
+}
+
+void WidgetServer::Command_to_client_your_session_id(HttpClient *sock)
+{
+	if(!sock->sessionPtr) Error("Command_to_client_new_session_id, but null sock->sessionPtr");
+	else SendInSock(sock,
+					NetClient::PrepareCommandToClient(
+						NetConstants::command_your_session_id(),
+						NetConstants::MakeAnsw_request_get_session(QSn(sock->sessionPtr->id), sock->sessionPtr->dt)),
+					true);
 }
 
 void WidgetServer::Command_to_client_remove_note(ISocket * sock, const QString & idOnClient)

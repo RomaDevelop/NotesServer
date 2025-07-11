@@ -11,18 +11,31 @@
 
 #include "Server.h"
 
-struct ClientData
-{
-	std::vector<int> lastSynchedNotesIdsOnServer;
-	QString msg;
-};
-
 struct SessionData
 {
 	qint64 id;
-	SessionData(qint64 id_): id{id_} {}
-
+	QString dt;
 	std::set<HttpClient*> activeSockets;
+
+	static SessionData* MakeNewSession()
+	{
+		auto newSessionPtr = sessionsDatas.emplace(new SessionData(sessionIdCounter++)).first->get();
+		mapIdAndSession[newSessionPtr->id] = newSessionPtr;
+		return newSessionPtr;
+	}
+	inline static std::map<qint64, SessionData*> mapIdAndSession;
+
+	bool CmpWithTarget(NetClient::TargetContent &targetContent)
+	{
+		return id == targetContent.sessionId.toLongLong() && dt == targetContent.sessionDt;
+	}
+
+private:
+
+	SessionData(qint64 id_): id{id_} { dt = QDateTime::currentDateTime().toString(NetConstants::auth_date_time_format()); }
+
+	inline static qint64 sessionIdCounter = 1;
+	inline static std::set<std::unique_ptr<SessionData>> sessionsDatas;
 };
 
 class WidgetServer : public QWidget, public Requester
@@ -54,12 +67,11 @@ private:
 
 	QDateTime lastUpdate;
 
-	std::map<HttpClient*, ClientData> clientsDatas;
+	std::set<HttpClient*> socketsWithotSession;
 
-	qint64 sessionIdCounter = 1;
-	std::set<std::unique_ptr<SessionData>> sessionsDatas;
+	// nullptr for creation new session
+	void BindSocketToSession(HttpClient* sock, SessionData *session, bool sendYourSessionId);
 	std::map<HttpClient*, SessionData*> mapClientSession;
-	std::map<qint64, SessionData*> mapIdSession;
 
 	void MsgsWorker(ISocket *sock, QString text);
 
@@ -75,7 +87,7 @@ private:
 
 	void RequestGetNote(ISocket * sock, QString idOnServer);
 
-	void request_get_session_id_worker(ISocket *sock, NetClient::RequestData && requestData);
+	void request_get_session_worker(ISocket *sock, NetClient::RequestData && requestData);
 	void request_try_create_group_worker(ISocket *sock, NetClient::RequestData && requestData);
 	void request_create_note_on_server_worker(ISocket *sock, NetClient::RequestData && requestData);
 	void request_move_note_to_group_worker(ISocket *sock, NetClient::RequestData && requestData);
@@ -88,7 +100,7 @@ private:
 	void request_polly_worker(ISocket *sock, NetClient::RequestData && requestData);
 
 	std::map<QStringRefWr_const, std::function<void(ISocket *sock, NetClient::RequestData &&requestData)>> requestWorkersMap {
-		{ std::cref(NetConstants::request_get_session_id()), [this](ISocket *sock, NetClient::RequestData &&requestData){ request_get_session_id_worker(sock, std::move(requestData)); } },
+		{ std::cref(NetConstants::request_get_session()), [this](ISocket *sock, NetClient::RequestData &&requestData){ request_get_session_worker(sock, std::move(requestData)); } },
 		{ std::cref(NetConstants::request_try_create_group()), [this](ISocket *sock, NetClient::RequestData &&requestData){ request_try_create_group_worker(sock, std::move(requestData)); } },
 		{ std::cref(NetConstants::request_create_note_on_server()), [this](ISocket *sock, NetClient::RequestData &&requestData){ request_create_note_on_server_worker(sock, std::move(requestData)); } },
 		{ std::cref(NetConstants::request_move_note_to_group()), [this](ISocket *sock, NetClient::RequestData &&requestData){ request_move_note_to_group_worker(sock, std::move(requestData)); } },
@@ -103,6 +115,7 @@ private:
 	};
 	virtual std::map<QStringRefWr_const, std::function<void(ISocket *sock, RequestData &&requestData)>> & RequestWorkersMap() override { return requestWorkersMap; }
 
+	void Command_to_client_your_session_id(HttpClient *sock);
 	void Command_to_client_remove_note(ISocket *sock, const QString &idOnClient);
 	void Command_to_client_update_note(ISocket *sock, const Note &note);
 };

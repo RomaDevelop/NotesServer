@@ -35,7 +35,9 @@ struct NetConstants
 	static const QString& request() { static QString str = "request: "; return str; }
 	static const QString& request_answ() { static QString str = "request_answ: "; return str; }
 
-	static const QString& request_get_session_id() { static QString str = "request_get_session_id"; return str; }
+	static const QString& request_get_session() { static QString str = "request_get_session"; return str; }
+	static QString MakeAnsw_request_get_session(QString sessionId, const QString &sessionDt);
+	static QStringPair GetIdAndDtFromAnswGetSession(const QString& answ);
 
 	static const QString& request_try_create_group() { static QString str = "request_try_create_group"; return str; }
 	static QString MakeAnsw_try_create_group(const QString& groupId) { return QString(NetConstants::success()).append(' ').append(groupId); }
@@ -74,7 +76,7 @@ struct NetConstants
 
 	static const std::set<QStringRefWr_const>& allReuestTypes() { // сет нужен, нельзя заменить мапой из сервера потому что используется в клиенте
 		static std::set<QStringRefWr_const> setSinglton {
-					std::cref(request_get_session_id()),
+					std::cref(request_get_session()),
 					std::cref(request_try_create_group()),
 					std::cref(request_create_note_on_server()),
 					std::cref(request_move_note_to_group()),
@@ -105,6 +107,7 @@ struct NetConstants
 	}
 
 	static const QString& command_to_client() { static QString str = "c_c: "; return str; }
+	static const QString& command_your_session_id() { static QString str = "your_session_id"; return str; }
 	static const QString& command_remove_note() { static QString str = "remove_note"; return str; }
 	// сервер отправляет idOnServer
 	static const QString& command_update_note() { static QString str = "update_note"; return str; }

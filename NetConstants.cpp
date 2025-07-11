@@ -5,6 +5,20 @@
 const int NetConstants::pollyMaxWaitServerMs = 25000;
 const int NetConstants::pollyMaxWaitClientMs = 30000;
 
+QString NetConstants::MakeAnsw_request_get_session(QString sessionId, const QString &sessionDt)
+{
+	sessionId.append(" ").append(sessionDt);
+	return sessionId;
+}
+
+QStringPair NetConstants::GetIdAndDtFromAnswGetSession(const QString &answ)
+{
+	auto words = answ.split(' ');
+	if(words.size() == 2)
+		return {std::move(words[0]), std::move(words[1])};
+	else return {"",""};
+}
+
 QString NetConstants::MakeRequest_move_note_to_group(const QString & idNoteOnServer, const QString & idNewGroup, const QDateTime & dtUpdated)
 {
 	return QString(idNoteOnServer).append(" ").append(idNewGroup).append(" ")

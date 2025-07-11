@@ -55,7 +55,11 @@ public:
 
 	uint8_t authFailCount;
 
+	bool addedInSocksWitoutSession = false;
+	bool removedFromSocksWitoutSession = false;
+
 	SessionData *sessionPtr = nullptr;
+	bool connectDid_ErasingActiveSock = false;
 
 private:
 	volatile bool hasPreparedDataToWrite = false;
