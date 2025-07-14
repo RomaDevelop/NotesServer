@@ -109,6 +109,11 @@ const QString &DataBase::DefaultGroupId2()
 	return str;
 }
 
+QStringList DataBase::GroupsIds()
+{
+		return DoSqlQueryGetFirstField("select "+Fields::idGroup()+" from "+Fields::Groups());
+}
+
 QStringList DataBase::GroupsNames()
 {
 	return DoSqlQueryGetFirstField("select "+Fields::nameGroup()+" from "+Fields::Groups());
@@ -335,6 +340,12 @@ bool DataBase::CheckNoteIdOnServer(const QString & idOnServer)
 								  +" where "+Fields::idNoteOnServer()+" = " + idOnServer).toInt();
 }
 
+QStringPairVector DataBase::NotesFromGroup_id_dtUpdated(const QString &idGroup)
+{
+	return DoSqlQueryGetFirstTwoFields("select "+Fields::idNoteOnServer()+", "+Fields::dtLastUpdated()
+									   +" from "+Fields::Notes()+" where "+Fields::idGroup()+" = "+idGroup);
+}
+
 std::vector<Note> DataBase::NotesFromBD()
 {
 	std::vector<Note> notes;
@@ -349,8 +360,6 @@ std::vector<Note> DataBase::NotesFromBD()
 	}
 	return notes;
 }
-
-
 
 bool DataBase::SetNoteFieldIdOnServer_OnClient(const QString & idNote, const QString & idOnServer)
 {

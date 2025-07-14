@@ -24,6 +24,7 @@ public:
 	static QString CountGroupsWithId(QString idGroup);
 	static QString CountGroupsWithName(QString nameGroup);
 	static const QString& DefaultGroupId2();
+	static QStringList GroupsIds();
 	static QStringList GroupsNames();
 	static QStringPairVector GroupsIdsAndNames();
 	static QStringListVector GroupsAllFields();
@@ -44,6 +45,7 @@ public:
 	static std::pair<bool, QStringList> NoteByIdOnServerWithCheck(const QString &idOnServer);
 	static bool CheckNoteIdOnClient(const QString &id);
 	static bool CheckNoteIdOnServer(const QString &idOnServer);
+	static QStringPairVector NotesFromGroup_id_dtUpdated(const QString &idGroup);
 	static std::vector<Note> NotesFromBD();
 
 	static bool SetNoteFieldIdOnServer_OnClient(const QString &idNote, const QString &idOnServer);

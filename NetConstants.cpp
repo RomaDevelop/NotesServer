@@ -67,3 +67,37 @@ std::vector<NetConstants::SynchData> NetConstants::GetDataFromRequest_synch_note
 	}
 	return datas;
 }
+
+QString NetConstants::request_group_check_notes_prepare(QString &&idGroup, const QStringPairVector &idsNotes_dtsLastUpdated)
+{
+	QString &str = idGroup;
+	str.append(",");
+	for(auto &idNote_dtLastUpdated:idsNotes_dtsLastUpdated)
+	{
+		str.append(idNote_dtLastUpdated.first).append(',').append(idNote_dtLastUpdated.second);
+		str.append(',');
+	}
+	str.chop(1);
+	return str;
+}
+
+std::tuple<bool, QString, QStringPairVector> NetConstants::request_group_check_notes_decode(const QString &str)
+{
+	auto listRefs = str.splitRef(',');
+	if(listRefs.isEmpty()) return {false, {}, {}};
+	std::tuple<bool, QString, QStringPairVector> result = {true, {}, {}};
+	std::get<1>(result) = listRefs[0].toString();
+	for(int i=1; i<listRefs.size(); i+=2)
+	{
+		if(i+1 >= listRefs.size()) { std::get<0>(result) = false; break; }
+
+		auto idNote_dtUpdated = std::get<2>(result).emplace_back();
+		idNote_dtUpdated.first = listRefs[i].toString();
+		idNote_dtUpdated.second = listRefs[i+1].toString();
+	}
+	return result;
+}
+
+
+
+
