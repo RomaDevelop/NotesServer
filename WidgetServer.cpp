@@ -216,17 +216,74 @@ void WidgetServer::SlotReadClient()
 		return;
 	}
 
+	// AuthCheck
+	if(!AuthCheck(sock, targetContent)) return;
+	// SessionWork
+	if(!SessionWork(sock, targetContent)) return;
+
+	if(body.endsWith(';')) body.chop(1);
+	else
+	{
+		Error("get unfinished data ["+body+"]");
+		return;
+	}
+	auto msgs = body.split(';');
+
+	for(auto &msg:msgs)
+	{
+		msg.replace(NetConstants::end_marker_replace(), NetConstants::end_marker());
+		Log("received message: " + msg);
+
+		if(msg.startsWith(NetConstants::msg()))
+		{
+			MsgsWorker(sock, std::move(msg));
+		}
+		else if(msg.startsWith(NetConstants::request()))
+		{
+			RequestsWorker(sock, std::move(msg));
+		}
+		else if(msg.startsWith(NetConstants::request_answ()))
+		{
+			RequestsAnswersWorker(std::move(msg));
+		}
+		else
+		{
+			Warning("received unexpacted data from client {" + msg + "}");
+//			static int a = 0;
+//			if(a++ % 2 != 0) return;
+			SendInSock(sock, NetConstants::unexpected(), true);
+//			MyCppDifferent::sleep_ms(100);
+//			SendInSock(sock, "1fghfghfgh11", true);
+//			MyCppDifferent::sleep_ms(100);
+//			SendInSock(sock, "2222", true);
+//			MyCppDifferent::sleep_ms(100);
+//			SendInSock(sock, "33333", true);
+		}
+	}
+}
+
+bool WidgetServer::AuthCheck(HttpClient *sock, const NetClient::TargetContent &targetContent)
+{
 	bool authRes = NetClient::ChekAuth(targetContent);
 	Log(QString("auth res: ").append(authRes ? "success" : "fail"));
 	if(authRes) sock->authFailCount = 0;
 	else
 	{
 		sock->authFailCount++;
-		//if(sock->authFailCount > 5) { sock->socket->close(); return; }
+		if(sock->authFailCount > 5)
+		{
+			sock->socket->close();
+			return false;
+		}
 		SendInSock(sock, NetConstants::auth_failed(), true);
-		return;
+		return false;
 	}
 
+	return true;
+}
+
+bool WidgetServer::SessionWork(HttpClient *sock, const NetClient::TargetContent &targetContent)
+{
 	// клиент прислал undefinedSessionIdStr
 	if(targetContent.sessionId == NetClient::undefinedSessionIdStr())
 	{
@@ -257,7 +314,7 @@ void WidgetServer::SlotReadClient()
 					  + QSn(sock->sessionPtr->id)+" != "+targetContent.sessionId
 					  + " or " + sock->sessionPtr->dt+" ? "+targetContent.sessionDt + ")");
 				SendInSock(sock, NetConstants::msg_error(), true);
-				return;
+				return false;
 			}
 		}
 		// это неизвестный для сервера сокет
@@ -281,7 +338,7 @@ void WidgetServer::SlotReadClient()
 			{
 				BindSocketToSession(sock, nullptr, true);
 				Log("new client " + MyQString::AsDebug(sock) + " not passed session check for existing session id "
-					  + QSn(idFromTarget) + "; created new session " + QSn(sock->sessionPtr->id));
+					+ QSn(idFromTarget) + "; created new session " + QSn(sock->sessionPtr->id));
 			}
 		}
 
@@ -289,46 +346,7 @@ void WidgetServer::SlotReadClient()
 		if(0) CodeMarkers::can_be_optimized("можно убрать предобразование строки в число");
 	}
 
-	if(body.endsWith(';')) body.chop(1);
-	else
-	{
-		Error("get unfinished data ["+body+"]");
-		return;
-	}
-	auto msgs = body.split(';');
-
-	for(auto &msg:msgs)
-	{
-		msg.replace(NetConstants::end_marker_replace(), NetConstants::end_marker());
-		Log("received message: " + msg);
-
-		if(msg.startsWith(NetConstants::msg()))
-		{
-			MsgsWorker(sock, std::move(msg));
-		}
-		else if(msg.startsWith(NetConstants::request()))
-		{
-			RequestsWorker(sock, std::move(msg));
-		}
-		else if(msg.startsWith(NetConstants::request_answ()))
-		{
-			RequestsAnswersWorker(std::move(msg));
-		}
-		else
-		{
-
-			Warning("received unexpacted data from client {" + msg + "}");
-//			static int a = 0;
-//			if(a++ % 2 != 0) return;
-			SendInSock(sock, NetConstants::unexpected(), true);
-//			MyCppDifferent::sleep_ms(100);
-//			SendInSock(sock, "1fghfghfgh11", true);
-//			MyCppDifferent::sleep_ms(100);
-//			SendInSock(sock, "2222", true);
-//			MyCppDifferent::sleep_ms(100);
-//			SendInSock(sock, "33333", true);
-		}
-	}
+	return true;
 }
 
 void WidgetServer::Write(ISocket *sock, const QString &str)
@@ -392,6 +410,7 @@ void WidgetServer::MsgsWorker(ISocket * sock, QString text)
 	if(!msgData.errors.isEmpty())
 	{
 		Error("error decoding msg: "+msgData.errors + "; full text:\n"+text);
+		SendInSock(sock, NetConstants::msg_error() + " error decoding msg", true);
 		return;
 	}
 
@@ -402,21 +421,27 @@ void WidgetServer::MsgsWorker(ISocket * sock, QString text)
 		std::function<void(ISocket *sock, QString &&)> &requestWorker = it->second;
 		requestWorker(sock, std::move(msgData.content));
 	}
-	else Error("Unrealesed requestData.type " + msgData.type);
+	else
+	{
+		Error("Unrealesed msgData.type " + msgData.type);
+		SendInSock(sock, NetConstants::msg_error() + " Unrealesed msgData.type " + msgData.type, true);
+	}
 }
 
-void WidgetServer::msg_error_worker(ISocket * /*sock*/, QString && msgContent)
+void WidgetServer::msg_error_worker(ISocket * sock, QString && msgContent)
 {
 	msgContent.prepend("Geted msg about error from client: ");
 	Error(msgContent);
+	SendInSock(sock, NetConstants::nothing(), true);
 }
 
-void WidgetServer::msg_all_client_notes_synch_sended_worker(ISocket * /*sock*/, QString && /*msgContent*/)
+void WidgetServer::msg_all_client_notes_synch_sended_worker(ISocket * sock, QString && /*msgContent*/)
 {
 	Error("//auto &clientData = clientsDatas[sock];");
 	//auto &clientData = clientsDatas[sock];
 	//clientData.lastSynchedNotesIdsOnServer.clear();
 	Log("msg_all_client_notes_synch_sended get, lastSynchedNotesIdsOnServer cleared");
+	SendInSock(sock, NetConstants::nothing(), true);
 }
 
 void WidgetServer::msg_highest_idOnServer_worker(ISocket * sock, QString && msgContent)
@@ -429,6 +454,9 @@ void WidgetServer::msg_highest_idOnServer_worker(ISocket * sock, QString && msgC
 	}
 
 	if(0) CodeMarkers::to_do("тут еще нужно анализировать на какие группы подписан клиент чтобы не передавать ему лишнего");
+	SendInSock(sock, NetConstants::nothing(), true);
+	if(0) CodeMarkers::to_do("приходится вручную следить чтобы сервер отвечал на каждое сообщение, "
+							 "это должно быть как-то автоматизированно");
 }
 
 void WidgetServer::RequestGetNote(ISocket * sock, QString idOnServer)
@@ -675,6 +703,23 @@ void WidgetServer::request_get_note_worker(ISocket *sock, Requester::RequestData
 	}
 
 	AnswerForRequestSending(sock, std::move(requestData), Note::InitFromRecordAndSaveToStr(rec));
+}
+
+void WidgetServer::request_group_check_notes_worker(ISocket *sock, Requester::RequestData &&requestData)
+{
+	Error("request_group_check_notes_worker deprecated");
+//	auto [ok, idGroup, idsNotes_dtsLastUpdated] = NetConstants::request_group_check_notes_decode(requestData.content);
+//	for(auto &[idNote,dtUpdated]:idsNotes_dtsLastUpdated)
+//	{
+
+//	}
+	AnswerForRequestSending(sock, std::move(requestData), NetConstants::success());
+}
+
+void WidgetServer::request_all_notes_worker(ISocket *sock, Requester::RequestData &&requestData)
+{
+	auto notesTable = DataBase::DoSqlQueryGetTable("select * from " + Fields::Notes());
+	AnswerForRequestSending(sock, std::move(requestData), NetConstants::request_all_notes_prepare(notesTable));
 }
 
 void WidgetServer::request_polly_worker(ISocket *sock, Requester::RequestData &&requestData)

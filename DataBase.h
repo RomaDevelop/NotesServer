@@ -46,7 +46,8 @@ public:
 	static bool CheckNoteIdOnClient(const QString &id);
 	static bool CheckNoteIdOnServer(const QString &idOnServer);
 	static QStringPairVector NotesFromGroup_id_dtUpdated(const QString &idGroup);
-	static std::vector<Note> NotesFromBD();
+	static std::vector<Note> NotesFromBD(bool subscibedOnly);
+	static std::set<QString> NotesIdsOnServer();
 
 	static bool SetNoteFieldIdOnServer_OnClient(const QString &idNote, const QString &idOnServer);
 

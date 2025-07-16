@@ -346,19 +346,26 @@ QStringPairVector DataBase::NotesFromGroup_id_dtUpdated(const QString &idGroup)
 									   +" from "+Fields::Notes()+" where "+Fields::idGroup()+" = "+idGroup);
 }
 
-std::vector<Note> DataBase::NotesFromBD()
+std::vector<Note> DataBase::NotesFromBD(bool subscibedOnly)
 {
 	std::vector<Note> notes;
-	auto table = DoSqlQueryGetTable("select * from "+Fields::Notes()
-			+" inner join "+Fields::Groups()+" on "+Fields::Groups()+"."+Fields::idGroup()+" = "+Fields::Notes()+"."+Fields::idGroup()
-			+" where "+Fields::subscribed()+" = "+Fields::True()
-			+" order by "+Fields::idNote());
+	QString sql = "select * from "+Fields::Notes();
+	if(subscibedOnly)
+		sql += " inner join "+Fields::Groups()+" on "+Fields::Groups()+"."+Fields::idGroup()+" = "+Fields::Notes()+"."+Fields::idGroup()
+				+" where "+Fields::subscribed()+" = "+Fields::True();
+	sql += " order by "+Fields::idNote();
+	auto table = DoSqlQueryGetTable(sql);
 	for(auto &row:table)
 	{
 		notes.emplace_back();
 		notes.back().InitFromRecord(row);
 	}
 	return notes;
+}
+
+std::set<QString> DataBase::NotesIdsOnServer()
+{
+	return DoSqlQueryGetFirstFieldAsSet("select "+Fields::idNoteOnServer()+" from "+Fields::Notes());
 }
 
 bool DataBase::SetNoteFieldIdOnServer_OnClient(const QString & idNote, const QString & idOnServer)

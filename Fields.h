@@ -8,6 +8,7 @@
 namespace SaveKeyWods {
 
 	inline const QString& endValue() { static QString str = "[endValue]\n"; return str; }
+	inline const QString& endNote() { static QString str = "[endNote]\n"; return str; }
 	inline const QString& dtFormat() { static QString str = "yyyy.MM.dd hh:mm:ss"; return str; }
 
 	inline const QString& version() { static QString str = "version: "; return str; }

@@ -1,6 +1,7 @@
 #ifndef CONSTANTS_H
 #define CONSTANTS_H
 
+#include <memory>
 #include <set>
 #include <functional>
 
@@ -15,6 +16,8 @@
 
 using QStringPair = std::pair<QString, QString>;
 using QStringPairVector = std::vector<QStringPair>;
+
+using QStringListVector = std::vector<QStringList>;
 
 using QStringRefWr_const = std::reference_wrapper<const QString>;
 
@@ -72,6 +75,7 @@ struct NetConstants
 	static QString request_synch_res_error() { static QString str = "0"; return str; }
 	//static const QString& request_get_new_notes() { static QString str = "get_new_notes"; return str; }
 	static const QString& request_group_check_notes() { static QString str = "group_check_notes"; return str; }
+	static const QString& request_all_notes() { static QString str = "all_notes"; return str; }
 
 	static const QString& request_polly() { static QString str = "polly"; return str; }
 
@@ -86,6 +90,8 @@ struct NetConstants
 					std::cref(request_get_note()),
 					std::cref(request_synch_note()),
 					//std::cref(request_get_new_notes()),
+					std::cref(request_group_check_notes()),
+					std::cref(request_all_notes()),
 
 					std::cref(request_polly()),
 		};
@@ -94,6 +100,9 @@ struct NetConstants
 
 	static QString request_group_check_notes_prepare(QString &&idGroup, const QStringPairVector &idsNotes_dtsLastUpdated);
 	static std::tuple<bool, QString, QStringPairVector> request_group_check_notes_decode(const QString &str);
+
+	static QString request_all_notes_prepare_answ(QStringListVector &recordsNotes);
+	static QStringList request_all_notes_decode_answ(const QString &allNotes);
 
 	static const QString& msg() { static QString str = "msg: "; return str; }
 	static const QString& msg_error() { static QString str = "error"; return str; }

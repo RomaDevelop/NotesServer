@@ -2,6 +2,8 @@
 
 #include "CodeMarkers.h"
 
+#include "Note.h"
+
 const int NetConstants::pollyMaxWaitServerMs = 25000;
 const int NetConstants::pollyMaxWaitClientMs = 30000;
 
@@ -96,6 +98,22 @@ std::tuple<bool, QString, QStringPairVector> NetConstants::request_group_check_n
 		idNote_dtUpdated.second = listRefs[i+1].toString();
 	}
 	return result;
+}
+
+QString NetConstants::request_all_notes_prepare_answ(QStringListVector &recordsNotes)
+{
+	QString message;
+	for(auto &row:recordsNotes)
+	{
+		message += Note::InitFromRecordAndSaveToStr(row);
+		message += SaveKeyWods::endNote();
+	}
+	return message;
+}
+
+QStringList NetConstants::request_all_notes_decode_answ(const QString &allNotes)
+{
+	return allNotes.split(SaveKeyWods::endNote());
 }
 
 

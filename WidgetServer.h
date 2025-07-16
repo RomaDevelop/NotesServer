@@ -25,7 +25,7 @@ struct SessionData
 	}
 	inline static std::map<qint64, SessionData*> mapIdAndSession;
 
-	bool CmpWithTarget(NetClient::TargetContent &targetContent)
+	bool CmpWithTarget(const NetClient::TargetContent &targetContent)
 	{
 		return id == targetContent.sessionId.toLongLong() && dt == targetContent.sessionDt;
 	}
@@ -57,6 +57,8 @@ private:
 private slots:
 	void SlotNewConnection(HttpClient *sock);
 	void SlotReadClient();
+	bool AuthCheck(HttpClient *sock, const NetClient::TargetContent &targetContent);
+	bool SessionWork(HttpClient *sock, const NetClient::TargetContent &targetContent);
 private:
 
 	virtual void Write(ISocket *sock, const QString &str) override;
@@ -96,6 +98,8 @@ private:
 	void request_synch_note_worker(ISocket *sock, NetClient::RequestData && requestData);
 	//void request_get_new_notes_worker(ISocket *sock, NetClient::RequestData && requestData) {}
 	void request_get_note_worker(ISocket *sock, NetClient::RequestData && requestData);
+	void request_group_check_notes_worker(ISocket *sock, NetClient::RequestData && requestData);
+	void request_all_notes_worker(ISocket *sock, NetClient::RequestData && requestData);
 
 	void request_polly_worker(ISocket *sock, NetClient::RequestData && requestData);
 
@@ -109,6 +113,8 @@ private:
 		{ std::cref(NetConstants::request_synch_note()), [this](ISocket *sock, NetClient::RequestData &&requestData){ request_synch_note_worker(sock, std::move(requestData)); } },
 		//{ std::cref(NetConstants::request_get_new_notes()), [this](ISocket *sock, NetClient::RequestData &&requestData){ request_get_new_notes_worker(sock, std::move(requestData)); } },
 		{ std::cref(NetConstants::request_get_note()), [this](ISocket *sock, NetClient::RequestData &&requestData){ request_get_note_worker(sock, std::move(requestData)); } },
+		{ std::cref(NetConstants::request_group_check_notes()), [this](ISocket *sock, NetClient::RequestData &&requestData){ request_group_check_notes_worker(sock, std::move(requestData)); } },
+		{ std::cref(NetConstants::request_all_notes()), [this](ISocket *sock, NetClient::RequestData &&requestData){ request_all_notes_worker(sock, std::move(requestData)); } },
 
 		{ std::cref(NetConstants::request_polly()), [this](ISocket *sock, NetClient::RequestData &&requestData){ request_polly_worker(sock, std::move(requestData)); } },
 
