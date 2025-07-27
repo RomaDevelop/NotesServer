@@ -108,12 +108,14 @@ QString NetConstants::request_all_notes_prepare_answ(QStringListVector &recordsN
 		message += Note::InitFromRecordAndSaveToStr(row);
 		message += SaveKeyWods::endNote();
 	}
+	if(!message.isEmpty()) message.chop(SaveKeyWods::endNote().size());
 	return message;
 }
 
-QStringList NetConstants::request_all_notes_decode_answ(const QString &allNotes)
+QStringList NetConstants::request_all_notes_decode_answ(const QString &answContent)
 {
-	return allNotes.split(SaveKeyWods::endNote());
+	if(answContent.isEmpty()) return {};
+	return answContent.split(SaveKeyWods::endNote());
 }
 
 

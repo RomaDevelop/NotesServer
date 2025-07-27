@@ -51,12 +51,12 @@ WidgetServer::WidgetServer(QWidget *parent)
 		for(auto &row:table) textEdit->append(row.join(' '));
 	});
 
-	QPushButton *btnSqlClearNotes = new QPushButton(" clear notes ");
-	hlo1->addWidget(btnSqlClearNotes);
-	connect(btnSqlClearNotes,&QPushButton::clicked,[](){
-		QMbError("disabled");
-		//DataBase::DoSqlQuery("delete from " + Fields::Notes());
-	});
+//	QPushButton *btnSqlClearNotes = new QPushButton(" clear notes ");
+//	hlo1->addWidget(btnSqlClearNotes);
+//	connect(btnSqlClearNotes,&QPushButton::clicked,[](){
+//		QMbError("disabled");
+//		//DataBase::DoSqlQuery("delete from " + Fields::Notes());
+//	});
 
 	QPushButton *btnDB = new QPushButton(" DB ");
 	hlo1->addWidget(btnDB);
@@ -266,20 +266,24 @@ bool WidgetServer::AuthCheck(HttpClient *sock, const NetClient::TargetContent &t
 {
 	bool authRes = NetClient::ChekAuth(targetContent);
 	Log(QString("auth res: ").append(authRes ? "success" : "fail"));
-	if(authRes) sock->authFailCount = 0;
+	if(authRes)
+	{
+		sock->authFailCount = 0;
+	}
 	else
 	{
 		sock->authFailCount++;
 		if(sock->authFailCount > 5)
 		{
 			sock->socket->close();
-			return false;
 		}
-		SendInSock(sock, NetConstants::auth_failed(), true);
-		return false;
+		else
+		{
+			SendInSock(sock, NetConstants::auth_failed(), true);
+		}
 	}
 
-	return true;
+	return authRes;
 }
 
 bool WidgetServer::SessionWork(HttpClient *sock, const NetClient::TargetContent &targetContent)
@@ -437,7 +441,7 @@ void WidgetServer::msg_error_worker(ISocket * sock, QString && msgContent)
 
 void WidgetServer::msg_all_client_notes_synch_sended_worker(ISocket * sock, QString && /*msgContent*/)
 {
-	Error("//auto &clientData = clientsDatas[sock];");
+	Warning("//auto &clientData = clientsDatas[sock];");
 	//auto &clientData = clientsDatas[sock];
 	//clientData.lastSynchedNotesIdsOnServer.clear();
 	Log("msg_all_client_notes_synch_sended get, lastSynchedNotesIdsOnServer cleared");
@@ -719,7 +723,7 @@ void WidgetServer::request_group_check_notes_worker(ISocket *sock, Requester::Re
 void WidgetServer::request_all_notes_worker(ISocket *sock, Requester::RequestData &&requestData)
 {
 	auto notesTable = DataBase::DoSqlQueryGetTable("select * from " + Fields::Notes());
-	AnswerForRequestSending(sock, std::move(requestData), NetConstants::request_all_notes_prepare(notesTable));
+	AnswerForRequestSending(sock, std::move(requestData), NetConstants::request_all_notes_prepare_answ(notesTable));
 }
 
 void WidgetServer::request_polly_worker(ISocket *sock, Requester::RequestData &&requestData)

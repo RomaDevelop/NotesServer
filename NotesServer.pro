@@ -10,6 +10,11 @@ SOURCES += \
     ../Notes/FastActions.cpp \
     ../Notes/NetClient.cpp \
     ../Notes/Note.cpp \
+    ../Notes/WidgetAlarms.cpp \
+    ../Notes/WidgetMain.cpp \
+    ../Notes/WidgetNoteEditor.cpp \
+    ../include/AdditionalTray.cpp \
+    ../include/PlatformDependent.cpp \
     DataBase.cpp \
     NetConstants.cpp \
     Server.cpp \
@@ -20,6 +25,13 @@ HEADERS += \
     ../Notes/FastActions.h \
     ../Notes/NetClient.h \
     ../Notes/Note.h \
+    ../Notes/WidgetAlarms.h \
+    ../Notes/WidgetMain.h \
+    ../Notes/WidgetNoteEditor.h \
+    ../include/AdditionalTray.h \
+    ../include/ClickableQWidget.h \
+    ../include/MyQTextEdit.h \
+    ../include/PlatformDependent.h \
     ../include/TextEditCleaner.h \
     DataBase.h \
     Fields.h \

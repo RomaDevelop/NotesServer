@@ -105,7 +105,7 @@ QString DataBase::CountGroupsWithName(QString nameGroup)
 
 const QString &DataBase::DefaultGroupId2()
 {
-	static QString str = GroupId(Note::defaultGroupName2());
+	static QString str = GroupId(Note::defaultGroupName());
 	return str;
 }
 
@@ -322,6 +322,14 @@ QStringList DataBase::NoteByIdOnServer(const QString & idOnServer)
 	return DoSqlQueryGetFirstRec("select * from "+Fields::Notes()+" where "+Fields::idNoteOnServer()+" = " + idOnServer);
 }
 
+Note DataBase::NoteByIdOnServer_make_note(const QString &idOnServer)
+{
+	auto rec = NoteByIdOnServer(idOnServer);
+	Note n;
+	n.InitFromRecord(rec);
+	return n;
+}
+
 std::pair<bool, QStringList> DataBase::NoteByIdOnServerWithCheck(const QString &idOnServer)
 {
 	if(CheckNoteIdOnServer(idOnServer)) return {true, NoteByIdOnServer(idOnServer)};
@@ -363,9 +371,16 @@ std::vector<Note> DataBase::NotesFromBD(bool subscibedOnly)
 	return notes;
 }
 
-std::set<QString> DataBase::NotesIdsOnServer()
+std::set<QString> DataBase::NotesIdsOnServer(bool gloabalNotesOnly)
 {
-	return DoSqlQueryGetFirstFieldAsSet("select "+Fields::idNoteOnServer()+" from "+Fields::Notes());
+	if(gloabalNotesOnly)
+	{
+		auto notes = DoSqlQueryGetFirstTwoFields("select "+Fields::idNoteOnServer()+", "+Fields::idGroup()+" from "+Fields::Notes());
+		std::set<QString> ids;
+		for(auto &note:notes) if(!DataBase::IsGroupLocalById(note.second)) ids.insert(std::move(note.first));
+		return ids;
+	}
+	else return DoSqlQueryGetFirstFieldAsSet("select "+Fields::idNoteOnServer()+" from "+Fields::Notes());
 }
 
 bool DataBase::SetNoteFieldIdOnServer_OnClient(const QString & idNote, const QString & idOnServer)
@@ -395,16 +410,18 @@ QString DataBase::SaveNoteOnClient(Note *note)
 		auto res = DoSqlQueryExt("update "+Fields::Notes()+" set "
 								 +Fields::nameNote() + " = :name, "
 								 +Fields::idNoteOnServer() + " = :idOnServer, "
+								 +Fields::idGroup() + " = :idGroup, "
 								 +Fields::activeNotify()+ " = :actNotif, "
 								 +Fields::dtNotify()+" = :dtNotif, "
 								 +Fields::dtPostpone()+ " = :dtPosp, "
-								 + Fields::content() + " = :content, "
+								 +Fields::content() + " = :content, "
 								 +Fields::dtLastUpdated() + " = :updated\n"
 
 								"where "+Fields::idNote()+" = :idNote",
 
 								 {{":idNote", QSn(note->id)},
 								  {":idOnServer", QSn(note->idOnServer)},
+								  {":idGroup", note->groupId},
 								  {":name", note->Name()},
 								  {":actNotif", QSn(note->activeNotify)},
 								  {":dtNotif", note->DTNotify().toString(Fields::dtFormat())},

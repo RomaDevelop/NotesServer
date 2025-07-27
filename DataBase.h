@@ -30,8 +30,8 @@ public:
 	static QStringListVector GroupsAllFields();
 	static bool IsGroupLocalById(const QString &id);
 	static bool IsGroupLocalByName(const QString &name);
-	static qint64 TryCreateNewGlobalGroup(QString name, QString idGroup); // ids: 1...n ; returns -1 if error
-	static qint64 TryCreateNewLocalGroup(QString name); // ids: 0...-n ; returns 1 if error
+	static qint64 TryCreateNewGlobalGroup(QString name, QString idGroup); // ids: 1...n ; returns id, or -1 if error
+	static qint64 TryCreateNewLocalGroup(QString name); // ids: 0...-n ; returns id, or 1 if error
 	static void SetGroupSubscribed(QString groupId, bool value);
 	static bool MoveNoteToGroupOnClient(QString noteId, QString newGroupId, QString dtUpdated);
 	static bool MoveNoteToGroupOnServer(QString noteIdOnServer, QString newGroupId, QString dtUpdated);
@@ -42,12 +42,13 @@ public:
 
 	static QStringList NoteByIdOnClient(const QString &id);
 	static QStringList NoteByIdOnServer(const QString &idOnServer);
+	static Note NoteByIdOnServer_make_note(const QString &idOnServer);
 	static std::pair<bool, QStringList> NoteByIdOnServerWithCheck(const QString &idOnServer);
 	static bool CheckNoteIdOnClient(const QString &id);
 	static bool CheckNoteIdOnServer(const QString &idOnServer);
 	static QStringPairVector NotesFromGroup_id_dtUpdated(const QString &idGroup);
 	static std::vector<Note> NotesFromBD(bool subscibedOnly);
-	static std::set<QString> NotesIdsOnServer();
+	static std::set<QString> NotesIdsOnServer(bool gloabalNotesOnly);
 
 	static bool SetNoteFieldIdOnServer_OnClient(const QString &idNote, const QString &idOnServer);
 
