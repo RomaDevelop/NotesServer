@@ -21,10 +21,10 @@ QStringPair NetConstants::GetIdAndDtFromAnswGetSession(const QString &answ)
 	else return {"",""};
 }
 
-QString NetConstants::MakeRequest_move_note_to_group(const QString & idNoteOnServer, const QString & idNewGroup, const QDateTime & dtUpdated)
+QString NetConstants::MakeRequest_move_note_to_group(const QString & idNote, const QString & idNewGroup, const QDateTime & dtUpdated)
 {
-	return QString(idNoteOnServer).append(" ").append(idNewGroup).append(" ")
-			.append(dtUpdated.toString(Fields::dtFormatLastUpated()));
+	return QString(idNote).append(" ").append(idNewGroup).append(" ")
+			.append(dtUpdated.toString(Fields::dtFormatLastUpdated()));
 }
 
 NetConstants::Rqst_data_move_note_to_group NetConstants::GetDataFromRequest_move_note_to_group(const QString & text)
@@ -49,7 +49,7 @@ QString NetConstants::MakeRequest_synch_note(std::vector<SynchData> datas)
 	if(datas.empty()) { qdbg << "MakeRequest_synch_note get empty"; return {}; }
 	QString res;
 	for(uint i=0; i<datas.size(); i++)
-		res.append(datas[i].idOnServer).append(',').append(datas[i].dtUpdatedStr).append(',');
+		res.append(datas[i].idNote).append(',').append(datas[i].dtUpdatedStr).append(',');
 	res.chop(1);
 	return res;
 }
@@ -64,7 +64,7 @@ std::vector<NetConstants::SynchData> NetConstants::GetDataFromRequest_synch_note
 	for(int i=0; i<parts.size(); i+=2)
 	{
 		auto &data = datas.emplace_back();
-		data.idOnServer = parts[i];
+		data.idNote = parts[i];
 		data.dtUpdatedStr = parts[i+1];
 	}
 	return datas;

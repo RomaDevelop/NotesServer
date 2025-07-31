@@ -159,13 +159,22 @@ qint64 DataBase::TryCreateNewGlobalGroup(QString name, QString idGroup)
 	if(workMode == server)
 	{
 		if(!idGroup.isEmpty()) { Error("TryCreateNewGlobalGroupidGroup: idGroup not empty in server mode"); return -1; }
-		uint64_t maxId = DoSqlQueryGetFirstCell("select max("+Fields::idGroup()+") from "+Fields::Groups()).toULongLong();
+		uint64_t maxId = DoSqlQueryGetFirstCell("select "+Fields::idGroup()+" from " + Fields::IdCounter()).toULongLong();
 		maxId++;
+
+		count = CountGroupsWithId(QSn(maxId));
+		if(count != "0") { return count.toInt() * -1; }
 
 		auto request = MakeInsertRequest(Fields::Groups(), {Fields::idGroup(), Fields::nameGroup()}, {QSn(maxId), std::move(name)});
 		DoSqlQuery(request.first, request.second);
 		count = CountGroupsWithId(QSn(maxId));
-		if(count == "1") return maxId;
+		if(count == "1")
+		{
+			auto r = MakeUpdateRequest(Fields::IdCounter(), {Fields::idGroup()}, {QSn(maxId)}, {}, {});
+			DoSqlQuery(r.first, r.second);
+
+			return maxId;
+		}
 		return count.toInt() * -1;
 	}
 	else if(workMode == client)
@@ -225,7 +234,7 @@ void DataBase::SetGroupSubscribed(QString groupId, bool value)
 	DoSqlQuery(request.first, request.second);
 }
 
-bool DataBase::MoveNoteToGroupOnClient(QString noteId, QString newGroupId, QString dtUpdated)
+bool DataBase::MoveNoteToGroup(QString noteId, QString newGroupId, QString dtUpdated)
 {
 	auto request = MakeUpdateRequest(Fields::Notes(), {Fields::idGroup(), Fields::dtLastUpdated()}, {newGroupId, dtUpdated},
 									 {Fields::idNote()}, {noteId});
@@ -234,125 +243,132 @@ bool DataBase::MoveNoteToGroupOnClient(QString noteId, QString newGroupId, QStri
 	else { Log("note "+noteId+" moved to group " + newGroupId); return true; }
 }
 
-bool DataBase::MoveNoteToGroupOnServer(QString noteIdOnServer, QString newGroupId, QString dtUpdated)
+QString DataBase::InsertNoteInDB(Note *note, bool createIdForNote)
 {
-	auto request = MakeUpdateRequest(Fields::Notes(), {Fields::idGroup(), Fields::dtLastUpdated()}, {newGroupId, dtUpdated},
-									 {Fields::idNoteOnServer()}, {noteIdOnServer});
-	auto res = DoSqlQueryExt(request.first, request.second);
-	if(!res.errors.isEmpty()) { Error("SaveNote update sql error: " + res.errors); return false; }
-	else { return true; }
-}
+	QString id = QSn(note->id);
+	if(createIdForNote)
+	{
+		if(workMode == server)
+		{
+			qint64 maxIdInt = DoSqlQueryGetFirstCell("select "+Fields::idNote()+" from " + Fields::IdCounter()).toLongLong();
+			id = QSn(++maxIdInt);
+		}
+		else
+		{
+			id = GetNewIdForLocalNote();
+		}
+	}
 
-qint64 DataBase::InsertNoteInClientDB(Note *note)
-{
+	if(auto count = CountNoteId(id); count != 0)
+		return "bad count before insert " + QSn(count);
+
 	auto res = DoSqlQueryExt("insert into " + Fields::Notes() + " ("
-							 +Fields::idNoteOnServer()+", "
-							 +Fields::idGroup()+", " + Fields::nameNote() + ", "
-							 +Fields::activeNotify() + ", " + Fields::dtNotify() + ", "
-							 +Fields::dtPostpone() + ", " + Fields::content() + ", "
+							 +Fields::idNote()+", "
+							 +Fields::idGroup()+", "
+							 +Fields::nameNote() + ", "
+							 +Fields::activeNotify() + ", "
+							 +Fields::dtCreated() + ", "
+							 +Fields::dtNotify() + ", "
+							 +Fields::dtPostpone() + ", "
+							 +Fields::content() + ", "
 							 +Fields::dtLastUpdated()+")\n"
-							 +"values (:idOnServer, :groupId, :name, :actNotif, :dtNotif, :dtPosp, :content, :updated)",
-					{{":idOnServer", QSn(note->idOnServer)},
+							 +"values (:idNote, :groupId, :name, :actNotif, :dtCreated, :dtNotif, :dtPosp, :content, :updated)",
+					{{":idNote", id},
 					 {":groupId", DataBase::GroupId(note->group)},
-					 {":name", note->Name()}, {":actNotif", QSn(note->activeNotify)},
+					 {":name", note->Name()},
+					 {":actNotif", QSn(note->activeNotify)},
+					 {":dtCreated", note->DTCreatedStr()},
 					 {":dtNotif", note->DTNotify().toString(Fields::dtFormat())},
 					 {":dtPosp", note->DTPostpone().toString(Fields::dtFormat())},
 					 {":content", note->Content()},
 					 {":updated", note->DtLastUpdatedStr()},
 					});
 
-	note->id = BadInsertNoteResult();
+	if(!res.errors.isEmpty()) return "InsertNoteInDB sql errors: " + res.errors;
 
-	if(res.errors.isEmpty())
+	if(auto count = CountNoteId(id); count != 1)
+		return "bad count after insert" + QSn(count);
+
+	if(workMode == server)
 	{
-		auto id = DoSqlQueryGetFirstCell("select max("+Fields::idNote()+") from " + Fields::Notes());
-		bool ok;
-		note->id = id.toUInt(&ok);
-		if(!ok)
-		{
-			note->id = BadInsertNoteResult();
-			QMbError("bad id " + id);
-		}
-
+		auto r = MakeUpdateRequest(Fields::IdCounter(), {Fields::idNote()}, {id}, {}, {});
+		DoSqlQuery(r.first, r.second);
 	}
-	else QMbError("note was not inserted");
 
-	return note->id;
+	note->id = id.toLongLong();
+
+	return {};
 }
 
-qint64 DataBase::InsertNoteInServerDB(Note * note)
+QString DataBase::GetNewIdForLocalNote()
 {
-	QString idGroup = GroupId(note->group);
-	if(idGroup.isEmpty()) { Error("InsertNoteInServerDB in not existing group "+note->group); return -1; }
-
-	auto res = DoSqlQueryExt("insert into " + Fields::Notes() + " ("+Fields::idNote()+", "+Fields::idGroup()+", " + Fields::nameNote() + ", "
-							 +Fields::activeNotify()+", " + Fields::dtNotify() + ", " + Fields::dtPostpone() + ", " + Fields::content()+ ", "
-							 +Fields::dtLastUpdated()+")\n"
-							 + "values (:idNote, :groupId, :name, :actNotif, :dtNotif, :dtPosp, :content, :dtUpdated)",
-							 {{":idNote", QSn(note->id)}, {":groupId", idGroup}, {":name", note->Name()}, {":actNotif", QSn(note->activeNotify)},
-					  {":dtNotif", note->DTNotify().toString(Fields::dtFormat())}, {":dtPosp", note->DTPostpone().toString(Fields::dtFormat())},
-					  {":content", note->Content()}, {":dtUpdated", note->DtLastUpdatedStr()}});
-
-	note->idOnServer = BadInsertNoteResult();
-
-	if(res.errors.isEmpty())
-	{
-		auto idOnServer = DoSqlQueryGetFirstCell("select max("+Fields::idNoteOnServer()+") from " + Fields::Notes());
-		bool ok;
-		note->idOnServer = idOnServer.toUInt(&ok);
-		if(!ok)
-		{
-			note->idOnServer = BadInsertNoteResult();
-			Error("bad idOnServer " + idOnServer);
-		}
-
-	}
-	else Error("note was not inserted");
-
-	return note->idOnServer;
+	qint64 minIdInt = DoSqlQueryGetFirstCell("select min("+Fields::idNote()+") from " + Fields::Notes()).toLongLong();
+	return QSn(--minIdInt);
 }
 
-QStringList DataBase::NoteByIdOnClient(const QString &id)
+//qint64 DataBase::InsertNoteInServerDB(Note * note)
+//{
+//	QString idGroup = GroupId(note->group);
+//	if(idGroup.isEmpty()) { Error("InsertNoteInServerDB in not existing group "+note->group); return -1; }
+
+//	auto res = DoSqlQueryExt("insert into " + Fields::Notes() + " ("+Fields::idNote()+", "+Fields::idGroup()+", " + Fields::nameNote() + ", "
+//							 +Fields::activeNotify()+", " + Fields::dtNotify() + ", " + Fields::dtPostpone() + ", " + Fields::content()+ ", "
+//							 +Fields::dtLastUpdated()+")\n"
+//							 + "values (:idNote, :groupId, :name, :actNotif, :dtNotif, :dtPosp, :content, :dtUpdated)",
+//							 {{":idNote", QSn(note->id)}, {":groupId", idGroup}, {":name", note->Name()}, {":actNotif", QSn(note->activeNotify)},
+//					  {":dtNotif", note->DTNotify().toString(Fields::dtFormat())}, {":dtPosp", note->DTPostpone().toString(Fields::dtFormat())},
+//					  {":content", note->Content()}, {":dtUpdated", note->DtLastUpdatedStr()}});
+
+//	note->idOnServer = BadInsertNoteResult();
+
+//	if(res.errors.isEmpty())
+//	{
+//		auto idOnServer = DoSqlQueryGetFirstCell("select max("+Fields::idNoteOnServer()+") from " + Fields::Notes());
+//		bool ok;
+//		note->idOnServer = idOnServer.toUInt(&ok);
+//		if(!ok)
+//		{
+//			note->idOnServer = BadInsertNoteResult();
+//			Error("bad idOnServer " + idOnServer);
+//		}
+
+//	}
+//	else Error("note was not inserted");
+
+//	return note->idOnServer;
+//}
+
+QStringList DataBase::NoteById(const QString &id)
 {
 	return DoSqlQueryGetFirstRec("select * from "+Fields::Notes()+" where "+Fields::idNote()+" = " + id);
 }
 
-QStringList DataBase::NoteByIdOnServer(const QString & idOnServer)
+Note DataBase::NoteById_make_note(const QString &id)
 {
-	return DoSqlQueryGetFirstRec("select * from "+Fields::Notes()+" where "+Fields::idNoteOnServer()+" = " + idOnServer);
-}
-
-Note DataBase::NoteByIdOnServer_make_note(const QString &idOnServer)
-{
-	auto rec = NoteByIdOnServer(idOnServer);
+	auto rec = NoteById(id);
 	Note n;
 	n.InitFromRecord(rec);
 	return n;
 }
 
-std::pair<bool, QStringList> DataBase::NoteByIdOnServerWithCheck(const QString &idOnServer)
+std::pair<bool, QStringList> DataBase::NoteByIdWithCheck(const QString &id)
 {
-	if(auto count = CountNoteIdOnServer(idOnServer); count == 1) return {true, NoteByIdOnServer(idOnServer)};
+	if(auto count = CountNoteId(id); count == 1) return {true, NoteById(id)};
 	else return {false, {}};
 }
 
-int DataBase::CountNoteIdOnClient(const QString &id)
+int DataBase::CountNoteId(const QString &id)
 {
+	if(0) CodeMarkers::to_do("should return string");
 	return DoSqlQueryGetFirstCell("select count("+Fields::idNote()+") from "+Fields::Notes()
 								  +" where "+Fields::idNote()+" = " + id).toInt();
 }
 
-int DataBase::CountNoteIdOnServer(const QString & idOnServer)
-{
-	return DoSqlQueryGetFirstCell("select count("+Fields::idNoteOnServer()+") from "+Fields::Notes()
-										+" where "+Fields::idNoteOnServer()+" = " + idOnServer).toInt();
-}
-
-QStringPairVector DataBase::NotesFromGroup_id_dtUpdated(const QString &idGroup)
-{
-	return DoSqlQueryGetFirstTwoFields("select "+Fields::idNoteOnServer()+", "+Fields::dtLastUpdated()
-									   +" from "+Fields::Notes()+" where "+Fields::idGroup()+" = "+idGroup);
-}
+//QStringPairVector DataBase::NotesFromGroup_id_dtUpdated(const QString &idGroup)
+//{
+//	return DoSqlQueryGetFirstTwoFields("select "+Fields::idNoteOnServer()+", "+Fields::dtLastUpdated()
+//									   +" from "+Fields::Notes()+" where "+Fields::idGroup()+" = "+idGroup);
+//}
 
 std::vector<Note> DataBase::NotesFromBD(bool subscibedOnly)
 {
@@ -361,7 +377,7 @@ std::vector<Note> DataBase::NotesFromBD(bool subscibedOnly)
 	if(subscibedOnly)
 		sql += " inner join "+Fields::Groups()+" on "+Fields::Groups()+"."+Fields::idGroup()+" = "+Fields::Notes()+"."+Fields::idGroup()
 				+" where "+Fields::subscribed()+" = "+Fields::True();
-	sql += " order by "+Fields::idNote();
+	sql += " order by "+Fields::dtCreated();
 	auto table = DoSqlQueryGetTable(sql);
 	for(auto &row:table)
 	{
@@ -371,116 +387,132 @@ std::vector<Note> DataBase::NotesFromBD(bool subscibedOnly)
 	return notes;
 }
 
-std::set<QString> DataBase::NotesIdsOnServer(bool gloabalNotesOnly)
+std::set<QString> DataBase::NotesIds(bool gloabalNotesOnly)
 {
 	if(gloabalNotesOnly)
 	{
-		auto notes = DoSqlQueryGetFirstTwoFields("select "+Fields::idNoteOnServer()+", "+Fields::idGroup()+" from "+Fields::Notes());
+		auto notes = DoSqlQueryGetFirstTwoFields("select "+Fields::idNote()+", "+Fields::idGroup()+" from "+Fields::Notes());
 		std::set<QString> ids;
 		for(auto &note:notes) if(!DataBase::IsGroupLocalById(note.second)) ids.insert(std::move(note.first));
 		return ids;
 	}
-	else return DoSqlQueryGetFirstFieldAsSet("select "+Fields::idNoteOnServer()+" from "+Fields::Notes());
+	else return DoSqlQueryGetFirstFieldAsSet("select "+Fields::idNote()+" from "+Fields::Notes());
 }
 
-bool DataBase::SetNoteFieldIdOnServer_OnClient(const QString & idNote, const QString & idOnServer)
+//bool DataBase::SetNoteFieldIdOnServer_OnClient(const QString & idNote, const QString & idOnServer)
+//{
+//	if(auto count = CountNoteIdOnClient(idNote); count != 1)
+//	{
+//		Error("SetNoteIdOnServer error: CheckNoteId " + idNote + " count " + QSn(count));
+//		return false;
+//	}
+//	auto r = MakeUpdateRequestOneField(Fields::Notes(), Fields::idNoteOnServer(), idOnServer, Fields::idNote(), idNote);
+//	auto res = DoSqlQueryExt(r.first, r.second);
+//	if(!res.errors.isEmpty())  { Error("SetNoteIdOnServer error: " + res.errors); return false; }
+//	else return true;
+//}
+
+QString DataBase::UpdateRecordFromNote(Note *note)
 {
-	if(auto count = CountNoteIdOnClient(idNote); count != 1)
+	if(CountNoteId(QSn(note->id)) != 1)
 	{
-		Error("SetNoteIdOnServer error: CheckNoteId " + idNote + " count " + QSn(count));
-		return false;
-	}
-	auto r = MakeUpdateRequestOneField(Fields::Notes(), Fields::idNoteOnServer(), idOnServer, Fields::idNote(), idNote);
-	auto res = DoSqlQueryExt(r.first, r.second);
-	if(!res.errors.isEmpty())  { Error("SetNoteIdOnServer error: " + res.errors); return false; }
-	else return true;
-}
-
-QString DataBase::SaveNoteOnClient(Note *note)
-{
-	// если это новая
-	if(note->id == Note::idMarkerCreateNewNote)
-	{
-		InsertNoteInClientDB(note);
-		if(CountNoteIdOnClient(QSn(note->id)) != 1) return "SaveNote: note "+note->Name()+" save error";
-	}
-	else // если не новая
-	{
-		if(CountNoteIdOnClient(QSn(note->id)) != 1)
-		{
-			return "SaveNote: note with id "+QSn(note->id)+" doesnt exists";
-		}
-
-		auto res = DoSqlQueryExt("update "+Fields::Notes()+" set "
-								 +Fields::nameNote() + " = :name, "
-								 +Fields::idNoteOnServer() + " = :idOnServer, "
-								 +Fields::idGroup() + " = :idGroup, "
-								 +Fields::activeNotify()+ " = :actNotif, "
-								 +Fields::dtNotify()+" = :dtNotif, "
-								 +Fields::dtPostpone()+ " = :dtPosp, "
-								 +Fields::content() + " = :content, "
-								 +Fields::dtLastUpdated() + " = :updated\n"
-
-								"where "+Fields::idNote()+" = :idNote",
-
-								 {{":idNote", QSn(note->id)},
-								  {":idOnServer", QSn(note->idOnServer)},
-								  {":idGroup", note->groupId},
-								  {":name", note->Name()},
-								  {":actNotif", QSn(note->activeNotify)},
-								  {":dtNotif", note->DTNotify().toString(Fields::dtFormat())},
-								  {":dtPosp", note->DTPostpone().toString(Fields::dtFormat())},
-								  {":content", note->Content()},
-								  {":updated", note->DtLastUpdatedStr()}
-								 });
-
-		if(!res.errors.isEmpty()) Error("SaveNote update sql error: " + res.errors);
+		return "SaveNote: note with id "+QSn(note->id)+" doesnt exists";
 	}
 
-	return "";
-}
-
-bool DataBase::SaveNoteOnServer(Note * note)
-{
-	if(auto count = CountNoteIdOnServer(QSn(note->idOnServer)); count != 1)
-	{
-		Error("SaveNote: note with idOnServer "+QSn(note->idOnServer)+" bad count " + QSn(count));
-		return false;
-	}
-
-	auto res = DoSqlQueryExt("update "+Fields::Notes()+" set "+Fields::nameNote() + " = :name, "
+	auto res = DoSqlQueryExt("update "+Fields::Notes()+" set "
+							 +Fields::nameNote() + " = :name, "
+							 +Fields::idGroup() + " = :idGroup, "
 							 +Fields::activeNotify()+ " = :actNotif, "
-							 +Fields::dtNotify()+" = :dtNotif, "+Fields::dtPostpone()+ " = :dtPosp, "
+							 +Fields::dtNotify()+" = :dtNotif, "
+							 +Fields::dtPostpone()+ " = :dtPosp, "
 							 +Fields::content() + " = :content, "
-							 +Fields::dtLastUpdated() + " = :dtUpdated\n"
-													"where "+Fields::idNoteOnServer()+" = :idOnServer",
+							 +Fields::dtLastUpdated() + " = :updated\n"
 
-							 {{":idOnServer", QSn(note->idOnServer)},
+							 "where "+Fields::idNote()+" = :idNote",
+
+							 {{":idNote", QSn(note->id)},
+							  {":idGroup", note->groupId},
 							  {":name", note->Name()},
 							  {":actNotif", QSn(note->activeNotify)},
 							  {":dtNotif", note->DTNotify().toString(Fields::dtFormat())},
 							  {":dtPosp", note->DTPostpone().toString(Fields::dtFormat())},
 							  {":content", note->Content()},
-							  {":dtUpdated", note->DtLastUpdatedStr()}});
+							  {":updated", note->DtLastUpdatedStr()}
+							 });
 
-	if(res.errors.isEmpty()) return true;
+	if(!res.errors.isEmpty()) Error("SaveNote update sql error: " + res.errors);
 
-	Error("SaveNote update sql error: " + res.errors);
-	return false;
+	return "";
 }
 
-bool DataBase::RemoveNoteOnClient(const QString &id, bool chekId)
-{	
-	if(chekId && CountNoteIdOnClient(id) != 1)
+QString DataBase::UpdateNote_IdNote_IdGroup(QString prevId, QString newId, QString newGroupId, const QDateTime &dtUpdated)
+{
+	if(CountNoteId(prevId) != 1)
 	{
-		QMbError("RemoveNote: note with id "+id+" bad count "+QSn(CountNoteIdOnClient(id)));
+		return "SaveNote: note with id "+prevId+" bad count "+QSn(CountNoteId(prevId));
+	}
+
+	auto res = DoSqlQueryExt("update "+Fields::Notes()+" set "
+							 +Fields::idNote() + " = :idNoteToSet, "
+							 +Fields::idGroup() + " = :idGroup, "
+							 +Fields::dtLastUpdated() + " = :updated\n"
+
+							"where "+Fields::idNote()+" = :idNoteWhere",
+
+							 {{":idNoteWhere", prevId},
+							  {":idNoteToSet", newId},
+							  {":idGroup", newGroupId},
+							  {":updated", dtUpdated.toString(Fields::dtFormatLastUpdated())},
+							 });
+
+	if(!res.errors.isEmpty())
+	{
+		return "SaveNote update sql error: " + res.errors;
+	}
+	return "";
+}
+
+//bool DataBase::SaveNoteOnServer(Note * note)
+//{
+//	if(auto count = CountNoteIdOnServer(QSn(note->idOnServer)); count != 1)
+//	{
+//		Error("SaveNote: note with idOnServer "+QSn(note->idOnServer)+" bad count " + QSn(count));
+//		return false;
+//	}
+
+//	auto res = DoSqlQueryExt("update "+Fields::Notes()+" set "+Fields::nameNote() + " = :name, "
+//							 +Fields::activeNotify()+ " = :actNotif, "
+//							 +Fields::dtNotify()+" = :dtNotif, "+Fields::dtPostpone()+ " = :dtPosp, "
+//							 +Fields::content() + " = :content, "
+//							 +Fields::dtLastUpdated() + " = :dtUpdated\n"
+//													"where "+Fields::idNoteOnServer()+" = :idOnServer",
+
+//							 {{":idOnServer", QSn(note->idOnServer)},
+//							  {":name", note->Name()},
+//							  {":actNotif", QSn(note->activeNotify)},
+//							  {":dtNotif", note->DTNotify().toString(Fields::dtFormat())},
+//							  {":dtPosp", note->DTPostpone().toString(Fields::dtFormat())},
+//							  {":content", note->Content()},
+//							  {":dtUpdated", note->DtLastUpdatedStr()}});
+
+//	if(res.errors.isEmpty()) return true;
+
+//	Error("SaveNote update sql error: " + res.errors);
+//	return false;
+//}
+
+bool DataBase::RemoveNote(const QString &id, bool chekId)
+{	
+	if(chekId && CountNoteId(id) != 1)
+	{
+		QMbError("RemoveNote: note with id "+id+" bad count "+QSn(CountNoteId(id)));
 		return false;
 	}
 
 	DoSqlQuery("delete from "+Fields::Notes()+" where "+Fields::idNote()+" = :idNote",
 							 {{":idNote", id}});
 
-	if(chekId && CountNoteIdOnClient(id) != 0)
+	if(chekId && CountNoteId(id) != 0)
 	{
 		QMbError("RemoveNote: note with id "+id+" after delete sql continue exist");
 		return false;
@@ -489,54 +521,34 @@ bool DataBase::RemoveNoteOnClient(const QString &id, bool chekId)
 	return true;
 }
 
-bool DataBase::RemoveNoteOnServer(const QString & idOnServer, bool chekId)
+//QString DataBase::HighestIdOnServer()
+//{
+//	return DoSqlQueryGetFirstCell("select max("+Fields::idNoteOnServer()+") from "+Fields::Notes());
+//}
+
+//std::vector<QStringList> DataBase::NotesWithHigherIdOnServer(const QString &idOnServer)
+//{
+//	return DoSqlQueryGetTable("select * from "+Fields::Notes()+" where "+Fields::idNoteOnServer()+" > " + idOnServer);
+//}
+
+void DataBase::SetOpensCount(const QString &noteId, int count)
 {
-	if(chekId && CountNoteIdOnServer(idOnServer) != 1)
-	{
-		Error("RemoveNote: note with idOnServer "+idOnServer+" bad count "+QSn(CountNoteIdOnServer(idOnServer)));
-		return false;
-	}
-
-	DoSqlQuery("delete from "+Fields::Notes()+" where "+Fields::idNoteOnServer()+" = :idNote",
-							 {{":idNote", idOnServer}});
-
-	if(chekId && CountNoteIdOnServer(idOnServer) != 0)
-	{
-		Error("RemoveNote: note with idOnServer "+idOnServer+" after delete sql continue exist");
-		return false;
-	}
-
-	return true;
-}
-
-QString DataBase::HighestIdOnServer()
-{
-	return DoSqlQueryGetFirstCell("select max("+Fields::idNoteOnServer()+") from "+Fields::Notes());
-}
-
-std::vector<QStringList> DataBase::NotesWithHigherIdOnServer(const QString &idOnServer)
-{
-	return DoSqlQueryGetTable("select * from "+Fields::Notes()+" where "+Fields::idNoteOnServer()+" > " + idOnServer);
-}
-
-void DataBase::SetOpensCount(const QString &noteIdOnClient, int count)
-{
-	if(CheckNoteIdOnClient(noteIdOnClient))
+	if(CountNoteId(noteId) == 1)
 		DoSqlQuery("UPDATE "+Fields::Notes()+" SET "+Fields::opensCount()+" = "+QSn(count)
-				+" WHERE "+Fields::idNote()+" = "+noteIdOnClient);
-	else Error("SetOpensCount: CheckNoteIdOnClient("+noteIdOnClient+") false");
+				+" WHERE "+Fields::idNote()+" = "+noteId);
+	else Error("SetOpensCount: CountNoteIdOnClient("+noteId+") bad count " + QSn(CountNoteId(noteId)));
 }
 
-void DataBase::AddOpensCount(const QString &noteIdOnClient, int addCount)
+void DataBase::AddOpensCount(const QString &noteId, int addCount)
 {
 	auto count = DoSqlQueryGetFirstCell("select count("+Fields::nameNote()+") from "+Fields::Notes()+" WHERE "+Fields::opensCount()+" <> 0");
 	if(count == "0") DoSqlQuery("UPDATE "+Fields::Notes()+" SET "+Fields::opensCount()+" = 0");
 	if(0) CodeMarkers::to_do("удалить присвоение нуля, оно было нужно потому что после создания поля оно оказалось пустым");
 
-	if(CheckNoteIdOnClient(noteIdOnClient))
+	if(CountNoteId(noteId) == 1)
 		DoSqlQuery("UPDATE "+Fields::Notes()+" SET "+Fields::opensCount()+" = "+Fields::opensCount()+" + "+QSn(addCount)
-				+" WHERE "+Fields::idNote()+" = "+noteIdOnClient);
-	else Error("AddOpensCount: CheckNoteIdOnClient("+noteIdOnClient+") false");
+				+" WHERE "+Fields::idNote()+" = "+noteId);
+	else Error("AddOpensCount: CountNoteIdOnClient("+noteId+") bad count " + QSn(CountNoteId(noteId)));
 }
 
 QStringList DataBase::NotesIdsOrderedByOpensCount()
@@ -545,19 +557,19 @@ QStringList DataBase::NotesIdsOrderedByOpensCount()
 								   +" order by "+Fields::opensCount()+" DESC, "+Fields::nameNote()+"");
 }
 
-void DataBase::SetNoteNotSendedToServer(const QString &idOnServer, bool value)
+void DataBase::SetNoteNotSendedToServer(const QString &noteId, bool value)
 {
-	auto count = CountNoteIdOnServer(idOnServer);
+	auto count = CountNoteId(noteId);
 	if(count != 1) { QMbError("SetNoteNotSendedToServer bad count "+QSn(count)); return; }
 	QString valueStr = value ? Fields::True() : Fields::False();
 	auto r = MakeUpdateRequestOneField(Fields::Notes(), Fields::notSendedToServer(), valueStr,
-							   Fields::idNoteOnServer(), idOnServer);
+							   Fields::idNote(), noteId);
 	DoSqlQuery(r.first,r.second);
 }
 
 QStringList DataBase::NotesNotSendedToServer()
 {
-	return DoSqlQueryGetFirstField("select "+Fields::idNoteOnServer()+" from "+Fields::Notes()
+	return DoSqlQueryGetFirstField("select "+Fields::idNote()+" from "+Fields::Notes()
 								   +" where "+Fields::notSendedToServer()+" = "+Fields::True());
 }
 

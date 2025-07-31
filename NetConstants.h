@@ -53,8 +53,8 @@ struct NetConstants
 	static qint64 GetFromAnsw_create_note_on_server_IdNoteOnServer(const QString& answ) { return GetInt64_IfFirstWordIsSuccess(answ); }
 
 	static const QString& request_move_note_to_group() { static QString str = "request_move_note_to_group"; return str; }
-	static QString MakeRequest_move_note_to_group(const QString &idNoteOnServer, const QString &idNewGroup, const QDateTime &dtUpdated);
-	declare_struct_3_fields_move(Rqst_data_move_note_to_group, QString, idNoteOnServer, QString, idNewGroup, QString, dtLastUpdatedStr);
+	static QString MakeRequest_move_note_to_group(const QString &idNote, const QString &idNewGroup, const QDateTime &dtUpdated);
+	declare_struct_3_fields_move(Rqst_data_move_note_to_group, QString, idNote, QString, idNewGroup, QString, dtLastUpdatedStr);
 	static Rqst_data_move_note_to_group GetDataFromRequest_move_note_to_group(const QString &text);
 
 	static const QString& request_remove_note() { static QString str = "request_remove_note"; return str; }
@@ -68,7 +68,7 @@ struct NetConstants
 
 	static const QString& request_synch_note() { static QString str = "synch_note"; return str; }
 	// клиент отправляет idOnServer и DtUpdated от нескольких заметок, сервер отвечает success
-	declare_struct_2_fields_move(SynchData, QString, idOnServer, QString, dtUpdatedStr);
+	declare_struct_2_fields_move(SynchData, QString, idNote, QString, dtUpdatedStr);
 	static QString MakeRequest_synch_note(std::vector<SynchData> datas);
 	static std::vector<SynchData> GetDataFromRequest_synch_note(const QString &text);
 	static QString request_synch_res_success() { static QString str = "1"; return str; }

@@ -33,38 +33,36 @@ public:
 	static qint64 TryCreateNewGlobalGroup(QString name, QString idGroup); // ids: 1...n ; returns id, or -1 if error
 	static qint64 TryCreateNewLocalGroup(QString name); // ids: 0...-n ; returns id, or 1 if error
 	static void SetGroupSubscribed(QString groupId, bool value);
-	static bool MoveNoteToGroupOnClient(QString noteId, QString newGroupId, QString dtUpdated);
-	static bool MoveNoteToGroupOnServer(QString noteIdOnServer, QString newGroupId, QString dtUpdated);
+	static bool MoveNoteToGroup(QString noteId, QString newGroupId, QString dtUpdated);
 
-	static qint64 InsertNoteInClientDB(Note *note);
-	static qint64 InsertNoteInServerDB(Note *note);
-	static qint64 BadInsertNoteResult() { return -1; }
+	static QString InsertNoteInDB(Note *note, bool createIdForNote);
+	static QString GetNewIdForLocalNote();
+	//static qint64 InsertNoteInServerDB(Note *note);
+	//static qint64 BadInsertNoteResult() { return -1; }
 
-	static QStringList NoteByIdOnClient(const QString &id);
-	static QStringList NoteByIdOnServer(const QString &idOnServer);
-	static Note NoteByIdOnServer_make_note(const QString &idOnServer);
-	static std::pair<bool, QStringList> NoteByIdOnServerWithCheck(const QString &idOnServer);
-	static int CountNoteIdOnClient(const QString &id);
-	static int CountNoteIdOnServer(const QString &idOnServer);
-	static QStringPairVector NotesFromGroup_id_dtUpdated(const QString &idGroup);
+	static QStringList NoteById(const QString &id);
+	static Note NoteById_make_note(const QString &id);
+	static std::pair<bool, QStringList> NoteByIdWithCheck(const QString &id);
+	static int CountNoteId(const QString &id);
+	//static QStringPairVector NotesFromGroup_id_dtUpdated(const QString &idGroup);
 	static std::vector<Note> NotesFromBD(bool subscibedOnly);
-	static std::set<QString> NotesIdsOnServer(bool gloabalNotesOnly);
+	static std::set<QString> NotesIds(bool gloabalNotesOnly);
 
-	static bool SetNoteFieldIdOnServer_OnClient(const QString &idNote, const QString &idOnServer);
+	//static bool SetNoteFieldIdOnServer_OnClient(const QString &idNote, const QString &idOnServer);
 
-	static QString SaveNoteOnClient(Note *note);
-	static bool SaveNoteOnServer(Note *note);
-	static bool RemoveNoteOnClient(const QString &id, bool chekId);
-	static bool RemoveNoteOnServer(const QString &idOnServer, bool chekId);
+	static QString UpdateRecordFromNote(Note *note);
+	static QString UpdateNote_IdNote_IdGroup(QString prevId, QString newId, QString newGroupId, const QDateTime &dtUpdated);
+	//static bool SaveNoteOnServer(Note *note);
+	static bool RemoveNote(const QString &id, bool chekId);
 
-	static QString HighestIdOnServer();
-	static std::vector<QStringList> NotesWithHigherIdOnServer(const QString &idOnServer);
+	//static QString HighestIdOnServer();
+	//static std::vector<QStringList> NotesWithHigherIdOnServer(const QString &idOnServer);
 
-	static void SetOpensCount(const QString &noteIdOnServer, int count);
-	static void AddOpensCount(const QString &noteIdOnServer, int addCount);
+	static void SetOpensCount(const QString &noteId, int count);
+	static void AddOpensCount(const QString &noteId, int addCount);
 	static QStringList NotesIdsOrderedByOpensCount();
 	
-	static void SetNoteNotSendedToServer(const QString &idOnServer, bool value);
+	static void SetNoteNotSendedToServer(const QString &noteId, bool value);
 	static QStringList NotesNotSendedToServer();
 	
 	///\brief return [idOnServer, idGroup]

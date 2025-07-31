@@ -79,12 +79,12 @@ private:
 
 	void msg_error_worker(ISocket *sock, QString && msgContent);
 	void msg_all_client_notes_synch_sended_worker(ISocket *sock, QString && msgContent);
-	void msg_highest_idOnServer_worker(ISocket *sock, QString && msgContent);
+	//void msg_highest_idOnServer_worker(ISocket *sock, QString && msgContent);
 
 	std::map<QStringRefWr_const, std::function<void(ISocket *sock, QString && msgContent)>> msgWorkersMap {
 		{ std::cref(NetConstants::msg_error()), [this](ISocket *sock, QString && msgContent){ msg_error_worker(sock, std::move(msgContent)); } },
 		{ std::cref(NetConstants::msg_all_client_notes_synch_sended()), [this](ISocket *sock, QString && msgContent){ msg_all_client_notes_synch_sended_worker(sock, std::move(msgContent)); } },
-		{ std::cref(NetConstants::msg_highest_idOnServer()), [this](ISocket *sock, QString && msgContent){ msg_highest_idOnServer_worker(sock, std::move(msgContent)); } },
+		//{ std::cref(NetConstants::msg_highest_idOnServer()), [this](ISocket *sock, QString && msgContent){ msg_highest_idOnServer_worker(sock, std::move(msgContent)); } },
 	};
 
 	void RequestGetNote(ISocket * sock, QString idOnServer);
@@ -95,7 +95,7 @@ private:
 	void request_move_note_to_group_worker(ISocket *sock, NetClient::RequestData && requestData);
 	void request_remove_note_worker(ISocket *sock, NetClient::RequestData && requestData);
 	void request_note_saved_worker(ISocket *sock, NetClient::RequestData && requestData);
-	void request_synch_note_worker(ISocket *sock, NetClient::RequestData && requestData);
+	//void request_synch_note_worker(ISocket *sock, NetClient::RequestData && requestData);
 	//void request_get_new_notes_worker(ISocket *sock, NetClient::RequestData && requestData) {}
 	void request_get_note_worker(ISocket *sock, NetClient::RequestData && requestData);
 	void request_group_check_notes_worker(ISocket *sock, NetClient::RequestData && requestData);
@@ -110,7 +110,7 @@ private:
 		{ std::cref(NetConstants::request_move_note_to_group()), [this](ISocket *sock, NetClient::RequestData &&requestData){ request_move_note_to_group_worker(sock, std::move(requestData)); } },
 		{ std::cref(NetConstants::request_remove_note()), [this](ISocket *sock, NetClient::RequestData &&requestData){ request_remove_note_worker(sock, std::move(requestData)); } },
 		{ std::cref(NetConstants::request_note_saved()), [this](ISocket *sock, NetClient::RequestData &&requestData){ request_note_saved_worker(sock, std::move(requestData)); } },
-		{ std::cref(NetConstants::request_synch_note()), [this](ISocket *sock, NetClient::RequestData &&requestData){ request_synch_note_worker(sock, std::move(requestData)); } },
+		//{ std::cref(NetConstants::request_synch_note()), [this](ISocket *sock, NetClient::RequestData &&requestData){ request_synch_note_worker(sock, std::move(requestData)); } },
 		//{ std::cref(NetConstants::request_get_new_notes()), [this](ISocket *sock, NetClient::RequestData &&requestData){ request_get_new_notes_worker(sock, std::move(requestData)); } },
 		{ std::cref(NetConstants::request_get_note()), [this](ISocket *sock, NetClient::RequestData &&requestData){ request_get_note_worker(sock, std::move(requestData)); } },
 		{ std::cref(NetConstants::request_group_check_notes()), [this](ISocket *sock, NetClient::RequestData &&requestData){ request_group_check_notes_worker(sock, std::move(requestData)); } },

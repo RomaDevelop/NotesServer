@@ -448,20 +448,20 @@ void WidgetServer::msg_all_client_notes_synch_sended_worker(ISocket * sock, QStr
 	SendInSock(sock, NetConstants::nothing(), true);
 }
 
-void WidgetServer::msg_highest_idOnServer_worker(ISocket * sock, QString && msgContent)
-{
-	auto table = DataBase::NotesWithHigherIdOnServer(msgContent);
-	Log("msg_highest_idOnServer get, count notes higher than on client: " + QSn(table.size()) + "; sending updates");
-	for(auto &row:table)
-	{
-		Command_to_client_update_note(sock, Note::CreateFromRecord(row));
-	}
+//void WidgetServer::msg_highest_idOnServer_worker(ISocket * sock, QString && msgContent)
+//{
+//	auto table = DataBase::NotesWithHigherIdOnServer(msgContent);
+//	Log("msg_highest_idOnServer get, count notes higher than on client: " + QSn(table.size()) + "; sending updates");
+//	for(auto &row:table)
+//	{
+//		Command_to_client_update_note(sock, Note::CreateFromRecord(row));
+//	}
 
-	if(0) CodeMarkers::to_do("тут еще нужно анализировать на какие группы подписан клиент чтобы не передавать ему лишнего");
-	SendInSock(sock, NetConstants::nothing(), true);
-	if(0) CodeMarkers::to_do("приходится вручную следить чтобы сервер отвечал на каждое сообщение, "
-							 "это должно быть как-то автоматизированно");
-}
+//	if(0) CodeMarkers::to_do("тут еще нужно анализировать на какие группы подписан клиент чтобы не передавать ему лишнего");
+//	SendInSock(sock, NetConstants::nothing(), true);
+//	if(0) CodeMarkers::to_do("приходится вручную следить чтобы сервер отвечал на каждое сообщение, "
+//							 "это должно быть как-то автоматизированно");
+//}
 
 void WidgetServer::RequestGetNote(ISocket * sock, QString idOnServer)
 {
@@ -476,13 +476,14 @@ void WidgetServer::RequestGetNote(ISocket * sock, QString idOnServer)
 		if(note_uptr)
 		{
 			Log("Note loaded from reseived data:\n" + note_uptr->ToStrForLog());
-			if(DataBase::SaveNoteOnServer(note_uptr.get()))
+			auto updateRes = DataBase::UpdateRecordFromNote(note_uptr.get());
+			if(updateRes.isEmpty())
 			{
 				Log("note "+note_uptr->Name()+" saved");
 			}
 			else
 			{
-				Error("note "+note_uptr->Name()+" tryed to save, but can't");
+				Error("note "+note_uptr->Name()+" tryed to save, but can't. Error: "+updateRes);
 			}
 		}
 		else
@@ -542,31 +543,31 @@ void WidgetServer::request_create_note_on_server_worker(ISocket * sock, NetClien
 		return;
 	}
 
-	auto idOnServer = DataBase::InsertNoteInServerDB(tmpNoteUptr.get());
-	if(idOnServer < 0)
+	auto insertRes = DataBase::InsertNoteInDB(tmpNoteUptr.get(), true);
+	if(!insertRes.isEmpty())
 	{
-		Error("Note "+tmpNoteUptr->Name()+" not created");
+		Error("Note "+tmpNoteUptr->Name()+" not created, error: "+insertRes);
 		AnswerForRequestSending(sock, std::move(requestData), NetConstants::not_did());
 	}
 	else
 	{
 		Log("Note "+tmpNoteUptr->Name()+" created");
-		AnswerForRequestSending(sock, std::move(requestData), NetConstants::MakeAnsw_create_note_on_server(QSn(idOnServer)));
+		AnswerForRequestSending(sock, std::move(requestData), NetConstants::MakeAnsw_create_note_on_server(QSn(tmpNoteUptr->id)));
 	}
 }
 
 void WidgetServer::request_move_note_to_group_worker(ISocket *sock, NetClient::RequestData && requestData)
 {
 	auto decoded = NetConstants::GetDataFromRequest_move_note_to_group(requestData.content);
-	if(decoded.idNoteOnServer.isEmpty() || decoded.idNewGroup.isEmpty() || decoded.dtLastUpdatedStr.isEmpty())
+	if(decoded.idNote.isEmpty() || decoded.idNewGroup.isEmpty() || decoded.dtLastUpdatedStr.isEmpty())
 	{
 		Error("GetIdNoteOnServerAndIdNewGroupFromRequest_move_note_to_group empty res");
 		AnswerForRequestSending(sock, std::move(requestData), NetConstants::not_did());
 		return;
 	}
-	if(!DataBase::CheckNoteIdOnServer(decoded.idNoteOnServer))
+	if(DataBase::CountNoteId(decoded.idNote) != 1)
 	{
-		Error("CheckNoteId "+decoded.idNoteOnServer+" false");
+		Error("bad CountNoteId "+decoded.idNote+": "+QSn(DataBase::CountNoteId(decoded.idNote)));
 		AnswerForRequestSending(sock, std::move(requestData), NetConstants::not_did());
 		return;
 	}
@@ -574,27 +575,27 @@ void WidgetServer::request_move_note_to_group_worker(ISocket *sock, NetClient::R
 	// в локальную группу, удаляем
 	if(decoded.idNewGroup == DataBase::IsGroupLocalById(decoded.idNewGroup))
 	{
-		if(DataBase::RemoveNoteOnServer(decoded.idNoteOnServer, true))
+		if(DataBase::RemoveNote(decoded.idNote, true))
 		{
-			Log("note "+decoded.idNoteOnServer+" moved to default group, server removed it");
+			Log("note "+decoded.idNote+" moved to default group, server removed it");
 			AnswerForRequestSending(sock, std::move(requestData), NetConstants::success());
 		}
 		else
 		{
-			Error("note tryed "+decoded.idNoteOnServer+"move to default group, but server remove it returned false");
+			Error("note tryed "+decoded.idNote+"move to default group, but server remove it returned false");
 			AnswerForRequestSending(sock, std::move(requestData), NetConstants::not_did());
 		}
 	}
 	else // не в локальную, перемещаем
 	{
-		if(DataBase::MoveNoteToGroupOnServer(decoded.idNoteOnServer, decoded.idNewGroup, decoded.dtLastUpdatedStr))
+		if(DataBase::MoveNoteToGroup(decoded.idNote, decoded.idNewGroup, decoded.dtLastUpdatedStr))
 		{
-			Log("note "+decoded.idNoteOnServer+" moved to group "+decoded.idNewGroup);
+			Log("note "+decoded.idNote+" moved to group "+decoded.idNewGroup);
 			AnswerForRequestSending(sock, std::move(requestData), NetConstants::success());
 		}
 		else
 		{
-			Error("note tryed "+decoded.idNoteOnServer+"move to group "+decoded.idNewGroup+", but server can't");
+			Error("note tryed "+decoded.idNote+"move to group "+decoded.idNewGroup+", but server can't");
 			AnswerForRequestSending(sock, std::move(requestData), NetConstants::not_did());
 		}
 	}
@@ -602,7 +603,7 @@ void WidgetServer::request_move_note_to_group_worker(ISocket *sock, NetClient::R
 
 void WidgetServer::request_remove_note_worker(ISocket * sock, NetClient::RequestData && requestData)
 {
-	if(DataBase::RemoveNoteOnServer(requestData.content, true))
+	if(DataBase::RemoveNote(requestData.content, true))
 	{
 		Log("note "+requestData.content+" removed");
 		AnswerForRequestSending(sock, std::move(requestData), NetConstants::success());
@@ -620,14 +621,15 @@ void WidgetServer::request_note_saved_worker(ISocket * sock, NetClient::RequestD
 	if(note_uptr)
 	{
 		Log("Note loaded from reseived data:\n" + note_uptr->ToStrForLog());
-		if(DataBase::SaveNoteOnServer(note_uptr.get()))
+		auto updRes = DataBase::UpdateRecordFromNote(note_uptr.get());
+		if(updRes.isEmpty())
 		{
 			Log("note "+note_uptr->Name()+" saved");
 			AnswerForRequestSending(sock, std::move(requestData), NetConstants::success());
 		}
 		else
 		{
-			Error("note "+note_uptr->Name()+" tryed to save, but can't");
+			Error("note "+note_uptr->Name()+" tryed to save, but can't. Error: "+updRes);
 			AnswerForRequestSending(sock, std::move(requestData), NetConstants::not_did());
 		}
 	}
@@ -638,68 +640,68 @@ void WidgetServer::request_note_saved_worker(ISocket * sock, NetClient::RequestD
 	}
 }
 
-void WidgetServer::request_synch_note_worker(ISocket * sock, NetClient::RequestData && requestData)
-{
-	Log("request_synch_note_worker: "+requestData.content);
+//void WidgetServer::request_synch_note_worker(ISocket * sock, NetClient::RequestData && requestData)
+//{
+//	Log("request_synch_note_worker: "+requestData.content);
 
-	auto datas = NetConstants::GetDataFromRequest_synch_note(requestData.content);
-	if(datas.empty()) {
-		Error("request_synch_note_worker get empty datas from content: " + requestData.content);
-		AnswerForRequestSending(sock, std::move(requestData), NetConstants::not_did());
-		return;
-	}
+//	auto datas = NetConstants::GetDataFromRequest_synch_note(requestData.content);
+//	if(datas.empty()) {
+//		Error("request_synch_note_worker get empty datas from content: " + requestData.content);
+//		AnswerForRequestSending(sock, std::move(requestData), NetConstants::not_did());
+//		return;
+//	}
 
-	QString answ;
-	for(uint i=0; i<datas.size(); i++) answ.append(NetConstants::request_synch_res_success()).append(',');
-	answ.chop(1);
-	AnswerForRequestSending(sock, std::move(requestData), answ);
+//	QString answ;
+//	for(uint i=0; i<datas.size(); i++) answ.append(NetConstants::request_synch_res_success()).append(',');
+//	answ.chop(1);
+//	AnswerForRequestSending(sock, std::move(requestData), answ);
 
-	for(auto &data:datas)
-	{
-		auto noteRec = DataBase::NoteByIdOnServer(data.idOnServer);
-		if(noteRec.isEmpty()) // заметка на сервере отсутсвует
-		{
-			/// значит она была удалена другим клиентом
-			/// отправляем клинету комунду удалить заметку
-			Log("note "+data.idOnServer+" not found on server, give client command to remove it");
-			Command_to_client_remove_note(sock, data.idOnServer);
-		}
-		else
-		{
-			Note note;
-			note.InitFromRecord(noteRec);
+//	for(auto &data:datas)
+//	{
+//		auto noteRec = DataBase::NoteByIdOnServer(data.idOnServer);
+//		if(noteRec.isEmpty()) // заметка на сервере отсутсвует
+//		{
+//			/// значит она была удалена другим клиентом
+//			/// отправляем клинету комунду удалить заметку
+//			Log("note "+data.idOnServer+" not found on server, give client command to remove it");
+//			Command_to_client_remove_note(sock, data.idOnServer);
+//		}
+//		else
+//		{
+//			Note note;
+//			note.InitFromRecord(noteRec);
 
-			Error("//auto &clientData = clientsDatas[sock];");
-			//auto &clientData = clientsDatas[sock];
-			//clientData.lastSynchedNotesIdsOnServer.emplace_back(note.idOnServer);
+//			Error("//auto &clientData = clientsDatas[sock];");
+//			//auto &clientData = clientsDatas[sock];
+//			//clientData.lastSynchedNotesIdsOnServer.emplace_back(note.idOnServer);
 
-			if(0) CodeMarkers::to_do_with_cpp20("replace two compare < > to one <=>");
-			else if(note.DtLastUpdatedStr() < data.dtUpdatedStr)
-			{
-				/// заметка на сервере отстаёт, запрашиваем у клиента полную информацию о заметке
-				Log("note "+note.Name()+" is old on server, request to client for update");
-				RequestGetNote(sock, QSn(note.idOnServer));
+//			if(0) CodeMarkers::to_do_with_cpp20("replace two compare < > to one <=>");
+//			else if(note.DtLastUpdatedStr() < data.dtUpdatedStr)
+//			{
+//				/// заметка на сервере отстаёт, запрашиваем у клиента полную информацию о заметке
+//				Log("note "+note.Name()+" is old on server, request to client for update");
+//				RequestGetNote(sock, QSn(note.idOnServer));
 
-			}
-			else if(note.DtLastUpdatedStr() > data.dtUpdatedStr)
-			{
-				/// заметка на клиенте отстаёт, отправляем клиенту команду обновить заметку
-				Log("note "+note.Name()+" is old on client, commad to client for update");
-				Command_to_client_update_note(sock, note);
-			}
-			else if(note.DtLastUpdatedStr() == data.dtUpdatedStr)
-			{
-				// если даты совпадают ничего делать не надо
-				Log("note "+note.Name()+" has same update on server and client");
-			}
-		}
-	}
-}
+//			}
+//			else if(note.DtLastUpdatedStr() > data.dtUpdatedStr)
+//			{
+//				/// заметка на клиенте отстаёт, отправляем клиенту команду обновить заметку
+//				Log("note "+note.Name()+" is old on client, commad to client for update");
+//				Command_to_client_update_note(sock, note);
+//			}
+//			else if(note.DtLastUpdatedStr() == data.dtUpdatedStr)
+//			{
+//				// если даты совпадают ничего делать не надо
+//				Log("note "+note.Name()+" has same update on server and client");
+//			}
+//		}
+//	}
+//}
 
 void WidgetServer::request_get_note_worker(ISocket *sock, Requester::RequestData &&requestData)
 {
-	QString &idOnServer = requestData.content;
-	auto [check, rec] = DataBase::NoteByIdOnServerWithCheck(idOnServer);
+	QString &id = requestData.content;
+	auto [check, rec] = DataBase::NoteByIdWithCheck(id);
 	if(!check) {
 		Error("request_get_note_worker not found note by id: " + requestData.content);
 		AnswerForRequestSending(sock, std::move(requestData), NetConstants::not_did());
