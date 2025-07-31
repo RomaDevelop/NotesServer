@@ -59,8 +59,10 @@ public:
 
 	static QString HighestIdOnServer();
 	static std::vector<QStringList> NotesWithHigherIdOnServer(const QString &idOnServer);
-	///\brief return [idOnServer, idGroup]
-	//static QStringPairVector NotesWithHigherIdOnServer(const QString &idOnServer);
+
+	static void SetOpensCount(const QString &noteIdOnServer, int count);
+	static void AddOpensCount(const QString &noteIdOnServer, int addCount);
+	static QStringList NotesIdsOrderedByOpensCount();
 };
 
 

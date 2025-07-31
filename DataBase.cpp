@@ -515,11 +515,31 @@ std::vector<QStringList> DataBase::NotesWithHigherIdOnServer(const QString &idOn
 	return DoSqlQueryGetTable("select * from "+Fields::Notes()+" where "+Fields::idNoteOnServer()+" > " + idOnServer);
 }
 
-//QStringPairVector DataBase::NotesWithHigherIdOnServer(const QString &idOnServer)
-//{
-//	return DoSqlQueryGetFirstTwoFields("select "+Fields::idNoteOnServer()+", "+Fields::idGroup()
-//									   +" from notes where "+Fields::idNoteOnServer()+" > " + idOnServer);
-//}
+void DataBase::SetOpensCount(const QString &noteIdOnClient, int count)
+{
+	if(CheckNoteIdOnClient(noteIdOnClient))
+		DoSqlQuery("UPDATE "+Fields::Notes()+" SET "+Fields::opensCount()+" = "+QSn(count)
+				+" WHERE "+Fields::idNote()+" = "+noteIdOnClient);
+	else Error("SetOpensCount: CheckNoteIdOnClient("+noteIdOnClient+") false");
+}
+
+void DataBase::AddOpensCount(const QString &noteIdOnClient, int addCount)
+{
+	auto count = DoSqlQueryGetFirstCell("select count("+Fields::nameNote()+") from "+Fields::Notes()+" WHERE "+Fields::opensCount()+" <> 0");
+	if(count == "0") DoSqlQuery("UPDATE "+Fields::Notes()+" SET "+Fields::opensCount()+" = 0");
+	if(0) CodeMarkers::to_do("удалить присвоение нуля, оно было нужно потому что после создания поля оно оказалось пустым");
+
+	if(CheckNoteIdOnClient(noteIdOnClient))
+		DoSqlQuery("UPDATE "+Fields::Notes()+" SET "+Fields::opensCount()+" = "+Fields::opensCount()+" + "+QSn(addCount)
+				+" WHERE "+Fields::idNote()+" = "+noteIdOnClient);
+	else Error("AddOpensCount: CheckNoteIdOnClient("+noteIdOnClient+") false");
+}
+
+QStringList DataBase::NotesIdsOrderedByOpensCount()
+{
+	return DoSqlQueryGetFirstField("select "+Fields::idNote()+" from "+Fields::Notes()
+								   +" order by "+Fields::opensCount()+" DESC, "+Fields::nameNote()+"");
+}
 
 
 
