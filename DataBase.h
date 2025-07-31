@@ -44,8 +44,8 @@ public:
 	static QStringList NoteByIdOnServer(const QString &idOnServer);
 	static Note NoteByIdOnServer_make_note(const QString &idOnServer);
 	static std::pair<bool, QStringList> NoteByIdOnServerWithCheck(const QString &idOnServer);
-	static bool CheckNoteIdOnClient(const QString &id);
-	static bool CheckNoteIdOnServer(const QString &idOnServer);
+	static int CountNoteIdOnClient(const QString &id);
+	static int CountNoteIdOnServer(const QString &idOnServer);
 	static QStringPairVector NotesFromGroup_id_dtUpdated(const QString &idGroup);
 	static std::vector<Note> NotesFromBD(bool subscibedOnly);
 	static std::set<QString> NotesIdsOnServer(bool gloabalNotesOnly);
@@ -63,6 +63,12 @@ public:
 	static void SetOpensCount(const QString &noteIdOnServer, int count);
 	static void AddOpensCount(const QString &noteIdOnServer, int addCount);
 	static QStringList NotesIdsOrderedByOpensCount();
+	
+	static void SetNoteNotSendedToServer(const QString &idOnServer, bool value);
+	static QStringList NotesNotSendedToServer();
+	
+	///\brief return [idOnServer, idGroup]
+	//static QStringPairVector NotesWithHigherIdOnServer(const QString &idOnServer);
 };
 
 

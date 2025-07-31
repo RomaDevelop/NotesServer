@@ -332,20 +332,20 @@ Note DataBase::NoteByIdOnServer_make_note(const QString &idOnServer)
 
 std::pair<bool, QStringList> DataBase::NoteByIdOnServerWithCheck(const QString &idOnServer)
 {
-	if(CheckNoteIdOnServer(idOnServer)) return {true, NoteByIdOnServer(idOnServer)};
+	if(auto count = CountNoteIdOnServer(idOnServer); count == 1) return {true, NoteByIdOnServer(idOnServer)};
 	else return {false, {}};
 }
 
-bool DataBase::CheckNoteIdOnClient(const QString &id)
+int DataBase::CountNoteIdOnClient(const QString &id)
 {
 	return DoSqlQueryGetFirstCell("select count("+Fields::idNote()+") from "+Fields::Notes()
 								  +" where "+Fields::idNote()+" = " + id).toInt();
 }
 
-bool DataBase::CheckNoteIdOnServer(const QString & idOnServer)
+int DataBase::CountNoteIdOnServer(const QString & idOnServer)
 {
 	return DoSqlQueryGetFirstCell("select count("+Fields::idNoteOnServer()+") from "+Fields::Notes()
-								  +" where "+Fields::idNoteOnServer()+" = " + idOnServer).toInt();
+										+" where "+Fields::idNoteOnServer()+" = " + idOnServer).toInt();
 }
 
 QStringPairVector DataBase::NotesFromGroup_id_dtUpdated(const QString &idGroup)
@@ -385,7 +385,11 @@ std::set<QString> DataBase::NotesIdsOnServer(bool gloabalNotesOnly)
 
 bool DataBase::SetNoteFieldIdOnServer_OnClient(const QString & idNote, const QString & idOnServer)
 {
-	if(!CheckNoteIdOnClient(idNote)) { Error("SetNoteIdOnServer error: CheckNoteId " + idNote + " false"); return false; }
+	if(auto count = CountNoteIdOnClient(idNote); count != 1)
+	{
+		Error("SetNoteIdOnServer error: CheckNoteId " + idNote + " count " + QSn(count));
+		return false;
+	}
 	auto r = MakeUpdateRequestOneField(Fields::Notes(), Fields::idNoteOnServer(), idOnServer, Fields::idNote(), idNote);
 	auto res = DoSqlQueryExt(r.first, r.second);
 	if(!res.errors.isEmpty())  { Error("SetNoteIdOnServer error: " + res.errors); return false; }
@@ -398,11 +402,11 @@ QString DataBase::SaveNoteOnClient(Note *note)
 	if(note->id == Note::idMarkerCreateNewNote)
 	{
 		InsertNoteInClientDB(note);
-		if(!CheckNoteIdOnClient(QSn(note->id))) return "SaveNote: note "+note->Name()+" save error";
+		if(CountNoteIdOnClient(QSn(note->id)) != 1) return "SaveNote: note "+note->Name()+" save error";
 	}
 	else // если не новая
 	{
-		if(!CheckNoteIdOnClient(QSn(note->id)))
+		if(CountNoteIdOnClient(QSn(note->id)) != 1)
 		{
 			return "SaveNote: note with id "+QSn(note->id)+" doesnt exists";
 		}
@@ -438,9 +442,9 @@ QString DataBase::SaveNoteOnClient(Note *note)
 
 bool DataBase::SaveNoteOnServer(Note * note)
 {
-	if(!CheckNoteIdOnServer(QSn(note->idOnServer)))
+	if(auto count = CountNoteIdOnServer(QSn(note->idOnServer)); count != 1)
 	{
-		Error("SaveNote: note with idOnServer "+QSn(note->idOnServer)+" doesnt exists");
+		Error("SaveNote: note with idOnServer "+QSn(note->idOnServer)+" bad count " + QSn(count));
 		return false;
 	}
 
@@ -467,16 +471,16 @@ bool DataBase::SaveNoteOnServer(Note * note)
 
 bool DataBase::RemoveNoteOnClient(const QString &id, bool chekId)
 {	
-	if(chekId && !CheckNoteIdOnClient(id))
+	if(chekId && CountNoteIdOnClient(id) != 1)
 	{
-		QMbError("RemoveNote: note with id "+id+" doesnt exists");
+		QMbError("RemoveNote: note with id "+id+" bad count "+QSn(CountNoteIdOnClient(id)));
 		return false;
 	}
 
 	DoSqlQuery("delete from "+Fields::Notes()+" where "+Fields::idNote()+" = :idNote",
 							 {{":idNote", id}});
 
-	if(chekId && CheckNoteIdOnClient(id))
+	if(chekId && CountNoteIdOnClient(id) != 0)
 	{
 		QMbError("RemoveNote: note with id "+id+" after delete sql continue exist");
 		return false;
@@ -487,16 +491,16 @@ bool DataBase::RemoveNoteOnClient(const QString &id, bool chekId)
 
 bool DataBase::RemoveNoteOnServer(const QString & idOnServer, bool chekId)
 {
-	if(chekId && !CheckNoteIdOnServer(idOnServer))
+	if(chekId && CountNoteIdOnServer(idOnServer) != 1)
 	{
-		Error("RemoveNote: note with idOnServer "+idOnServer+" doesnt exists");
+		Error("RemoveNote: note with idOnServer "+idOnServer+" bad count "+QSn(CountNoteIdOnServer(idOnServer)));
 		return false;
 	}
 
 	DoSqlQuery("delete from "+Fields::Notes()+" where "+Fields::idNoteOnServer()+" = :idNote",
 							 {{":idNote", idOnServer}});
 
-	if(chekId && CheckNoteIdOnServer(idOnServer))
+	if(chekId && CountNoteIdOnServer(idOnServer) != 0)
 	{
 		Error("RemoveNote: note with idOnServer "+idOnServer+" after delete sql continue exist");
 		return false;
@@ -540,6 +544,28 @@ QStringList DataBase::NotesIdsOrderedByOpensCount()
 	return DoSqlQueryGetFirstField("select "+Fields::idNote()+" from "+Fields::Notes()
 								   +" order by "+Fields::opensCount()+" DESC, "+Fields::nameNote()+"");
 }
+
+void DataBase::SetNoteNotSendedToServer(const QString &idOnServer, bool value)
+{
+	auto count = CountNoteIdOnServer(idOnServer);
+	if(count != 1) { QMbError("SetNoteNotSendedToServer bad count "+QSn(count)); return; }
+	QString valueStr = value ? Fields::True() : Fields::False();
+	auto r = MakeUpdateRequestOneField(Fields::Notes(), Fields::notSendedToServer(), valueStr,
+							   Fields::idNoteOnServer(), idOnServer);
+	DoSqlQuery(r.first,r.second);
+}
+
+QStringList DataBase::NotesNotSendedToServer()
+{
+	return DoSqlQueryGetFirstField("select "+Fields::idNoteOnServer()+" from "+Fields::Notes()
+								   +" where "+Fields::notSendedToServer()+" = "+Fields::True());
+}
+
+//QStringPairVector DataBase::NotesWithHigherIdOnServer(const QString &idOnServer)
+//{
+//	return DoSqlQueryGetFirstTwoFields("select "+Fields::idNoteOnServer()+", "+Fields::idGroup()
+//									   +" from notes where "+Fields::idNoteOnServer()+" > " + idOnServer);
+//}
 
 
 

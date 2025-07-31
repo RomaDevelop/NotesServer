@@ -37,6 +37,7 @@ namespace Fields {
 	inline const QString& content			() { static QString str = "content"; return str; }
 	inline const QString& dtLastUpdated		() { static QString str = "lastUpdated"; return str; }
 	inline const QString& opensCount		() { static QString str = "opensCount"; return str; }
+	inline const QString& notSendedToServer	() { static QString str = "notSendedToServer"; return str; }
 
 	const int idGroupIndexInGroups	= 0;
 	const int nameGroupIndex		= idGroupIndexInGroups+1;
