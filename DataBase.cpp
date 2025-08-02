@@ -260,7 +260,10 @@ QString DataBase::InsertNoteInDB(Note *note, bool createIdForNote)
 	}
 
 	if(auto count = CountNoteId(id); count != 0)
-		return "bad count before insert " + QSn(count);
+		return "bad CountNoteId before insert " + QSn(count);
+
+	if(CountGroupsWithId(note->groupId) != "1")
+		return "bad CountGroupsWithId("+note->groupId+") before insert " + CountGroupsWithId(note->groupId);
 
 	auto res = DoSqlQueryExt("insert into " + Fields::Notes() + " ("
 							 +Fields::idNote()+", "
@@ -274,7 +277,7 @@ QString DataBase::InsertNoteInDB(Note *note, bool createIdForNote)
 							 +Fields::dtLastUpdated()+")\n"
 							 +"values (:idNote, :groupId, :name, :actNotif, :dtCreated, :dtNotif, :dtPosp, :content, :updated)",
 					{{":idNote", id},
-					 {":groupId", DataBase::GroupId(note->group)},
+					 {":groupId", note->groupId},
 					 {":name", note->Name()},
 					 {":actNotif", QSn(note->activeNotify)},
 					 {":dtCreated", note->DTCreatedStr()},

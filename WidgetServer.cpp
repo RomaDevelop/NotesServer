@@ -543,6 +543,8 @@ void WidgetServer::request_create_note_on_server_worker(ISocket * sock, NetClien
 		return;
 	}
 
+	Warning(tmpNoteUptr->groupId);
+
 	auto insertRes = DataBase::InsertNoteInDB(tmpNoteUptr.get(), true);
 	if(!insertRes.isEmpty())
 	{

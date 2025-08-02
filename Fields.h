@@ -54,6 +54,8 @@ namespace Fields {
 	const int contentInd		= dtPostponeInd+1;
 	const int lastUpdatedInd	= contentInd+1;
 
+	const int fieldsInRecCount = lastUpdatedInd+1;
+
 	const int maxStringFieldLenth = 255;
 
 	inline const QString& dtFormat() { static QString str = SaveKeyWods::dtFormat(); return str; }
@@ -61,6 +63,7 @@ namespace Fields {
 
 	inline const QString& True() { static QString str = "1"; return str; }
 	inline const QString& False() { static QString str = "0"; return str; }
+	inline const QString& LogicValueFromBool(bool val) { return val ? True() : False(); };
 	inline bool CheckLogicField(const QString &value) { return (value == "1" || value == True()); }
 }
 
