@@ -53,7 +53,7 @@ BaseData DataBase::defineBase(workModes mode)
 		if(mode == server) return debug ? serverBaseDebugWork : serverBaseRegularWork;
 	}
 
-	QMbError("unexpacted dev name ("+LaunchParams::CurrentDeveloper()->devName+") or mode (" + MyQString::AsDebug(mode)+")");
+	Error("unexpacted dev name ("+LaunchParams::CurrentDeveloper()->devName+") or mode (" + MyQString::AsDebug(mode)+")");
 	return {};
 }
 
@@ -65,9 +65,9 @@ void DataBase::BackupBase()
 	QString backupPath = baseDataCurrent->storagePath + "/base_backups";
 	QString backupFile = backupPath + "/" + dtStr + " " + baseDataCurrent->baseFileNoPath;
 	if(!QDir().mkpath(QFileInfo(backupFile).path()))
-		{ QMbError("make path error for backup file " + backupFile); return; }
+		{ Error("make path error for backup file " + backupFile); return; }
 	if(!QFile::copy(baseDataCurrent->baseFilePathName, backupFile))
-		{ QMbError("creation backup error for backup file " + backupFile); return; }
+		{ Error("creation backup error for backup file " + backupFile); return; }
 	MyQFileDir::RemoveOldFiles(backupPath, 100);
 }
 
@@ -508,7 +508,7 @@ bool DataBase::RemoveNote(const QString &id, bool chekId)
 {	
 	if(chekId && CountNoteId(id) != 1)
 	{
-		QMbError("RemoveNote: note with id "+id+" bad count "+QSn(CountNoteId(id)));
+		Error("RemoveNote: note with id "+id+" bad count "+QSn(CountNoteId(id)));
 		return false;
 	}
 
@@ -517,7 +517,7 @@ bool DataBase::RemoveNote(const QString &id, bool chekId)
 
 	if(chekId && CountNoteId(id) != 0)
 	{
-		QMbError("RemoveNote: note with id "+id+" after delete sql continue exist");
+		Error("RemoveNote: note with id "+id+" after delete sql continue exist");
 		return false;
 	}
 
@@ -563,7 +563,7 @@ QStringList DataBase::NotesIdsOrderedByOpensCount()
 void DataBase::SetNoteNotSendedToServer(const QString &noteId, bool value)
 {
 	auto count = CountNoteId(noteId);
-	if(count != 1) { QMbError("SetNoteNotSendedToServer bad count "+QSn(count)); return; }
+	if(count != 1) { Error("SetNoteNotSendedToServer bad count "+QSn(count)); return; }
 	QString valueStr = value ? Fields::True() : Fields::False();
 	auto r = MakeUpdateRequestOneField(Fields::Notes(), Fields::notSendedToServer(), valueStr,
 							   Fields::idNote(), noteId);

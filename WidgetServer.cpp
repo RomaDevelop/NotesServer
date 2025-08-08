@@ -107,6 +107,9 @@ WidgetServer::WidgetServer(QWidget *parent)
 	ConnectDB();
 	StartServer();
 
+	Note::logWorker = [this](const QString &str){ Log(str); };
+	Note::errorWorker = [this](const QString &str){ Error(str); };
+
 	resize(650,600);
 	QTimer::singleShot(0,[this](){
 		move(-1850, 10);
